@@ -7,6 +7,9 @@ import { StorageError } from "@/lib/storage";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
+// Reading the upload and forwarding it to Supabase/Cloudinary can outlast
+// Vercel's 10s default on a slow connection.
+export const maxDuration = 30;
 
 export async function GET() {
   const { userId } = await auth();

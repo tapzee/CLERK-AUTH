@@ -11,7 +11,13 @@ import {
 } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MB
+/**
+ * Vercel rejects request bodies over 4.5 MB at the edge, before the function
+ * ever runs — the caller would get an opaque platform 413 instead of the
+ * message below. Staying under that ceiling keeps the failure ours to explain.
+ * A 1280x720 JPEG at quality 0.92 lands around 300 KB, so this is generous.
+ */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB
 
 export type PhotoRow = {
   id: string;
