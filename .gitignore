@@ -23,6 +23,22 @@
 # misc
 .DS_Store
 *.pem
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# archives
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# IDEs & editors
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # debug
 npm-debug.log*
@@ -39,3 +55,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ...but the template of required variables should be committed
+!.env.local.example
