@@ -19,6 +19,13 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
  */
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB
 
+/**
+ * Why a photo was taken. Attendance evidence shares this table so it inherits
+ * the storage-provider abstraction and per-user pathing, but it is kept out of
+ * the personal gallery — see `listPhotos`.
+ */
+export type PhotoPurpose = "personal" | "attendance";
+
 export type PhotoRow = {
   id: string;
   user_id: string;
@@ -39,6 +46,7 @@ export type PhotoRow = {
   altitude_m: number | null;
   location_error: string | null;
   capture_method: CaptureMethod;
+  purpose: PhotoPurpose;
 };
 
 export type PhotoWithUrl = PhotoRow & { url: string | null };
@@ -76,6 +84,7 @@ type StorePhotoInput = {
   capturedAt?: string | null;
   location?: LocationInput | null;
   captureMethod?: CaptureMethod;
+  purpose?: PhotoPurpose;
 };
 
 /**
@@ -90,6 +99,7 @@ export async function storePhoto({
   capturedAt,
   location,
   captureMethod = "manual",
+  purpose = "personal",
 }: StorePhotoInput): Promise<PhotoRow> {
   if (file.size === 0) {
     throw new StorageError("The uploaded photo is empty.", 400);
@@ -135,6 +145,7 @@ export async function storePhoto({
       altitude_m: location?.altitudeM ?? null,
       location_error: location?.error ?? null,
       capture_method: captureMethod,
+      purpose,
     })
     .select()
     .single<PhotoRow>();
@@ -153,12 +164,22 @@ function objectKey(provider: string, path: string) {
   return `${provider}:${path}`;
 }
 
-/** Lists the caller's photos, each with a freshly minted readable URL. */
-export async function listPhotos(userId: string, limit = 60): Promise<PhotoWithUrl[]> {
+/**
+ * Lists the caller's photos, each with a freshly minted readable URL.
+ *
+ * Defaults to personal captures: attendance evidence lives in the same table
+ * but belongs to the manager's view, not the staff member's gallery.
+ */
+export async function listPhotos(
+  userId: string,
+  limit = 60,
+  purpose: PhotoPurpose = "personal",
+): Promise<PhotoWithUrl[]> {
   const { data, error } = await supabaseAdmin()
     .from("photos")
     .select("*")
     .eq("user_id", userId)
+    .eq("purpose", purpose)
     .order("captured_at", { ascending: false })
     .limit(limit)
     .returns<PhotoRow[]>();

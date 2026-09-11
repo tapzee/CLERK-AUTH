@@ -63,4 +63,34 @@ export const serverEnv = {
   get cloudinaryFolder() {
     return process.env.CLOUDINARY_FOLDER ?? "live-photos";
   },
+
+  // Gemini — dress-code verification. Only the queue worker reads these.
+  get geminiApiKey() {
+    return required("GEMINI_API_KEY");
+  },
+  /**
+   * Flash-Lite by default, deliberately.
+   *
+   * The task is "is a cap present", not reasoning, and Flash-Lite is the only
+   * tier that accepts `thinkingLevel: "minimal"` — 3.8-flash's floor is "low",
+   * and thinking tokens bill at the output rate. Overriding this with a larger
+   * model costs several times more for the same verdict.
+   */
+  get geminiModel() {
+    return process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+  },
+  /**
+   * Hard ceiling on model calls per day, across the whole deployment.
+   *
+   * A retry loop or a runaway cron cannot cost more than this. Checks beyond it
+   * stay queued rather than being dropped, so they resume the next day.
+   */
+  get dressCheckDailyCap() {
+    const parsed = Number(process.env.GEMINI_DAILY_CALL_CAP);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 500;
+  },
+  /** Shared secret Vercel Cron presents; without it the worker is public. */
+  get cronSecret() {
+    return required("CRON_SECRET");
+  },
 };

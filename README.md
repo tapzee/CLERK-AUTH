@@ -80,6 +80,152 @@ that holds it, so old and new photos both keep resolving in the gallery.
 > it, signatures do not expire — they are unguessable, but they don't time out
 > the way Supabase's do. Supabase signed URLs here last 5 minutes.
 
+## Attendance and dress code
+
+Staff at a food cart punch in and out from `/attendance`. Every punch records a
+photo, the distance from the cart, and how late it was against the shift.
+
+```
+browser                          Next.js server
+────────                         ──────────────
+watch position  ──▶ distance to cart shown live
+   │  (button stays disabled until inside the fence)
+   ▼
+capture frame, scaled to 640px
+   │
+   ▼
+POST /api/attendance  ─────────▶ auth() verifies Clerk session
+  (multipart, cookie)            resolve staff row from the Clerk user id
+                                 reject if already checked in  ─┐
+                                 reject if outside the geofence ─┤ no upload,
+                                                                 ┘ no storage write
+                                 store evidence photo
+                                 insert attendance_events
+                                   └─ trigger fills business_date +
+                                      late_by_minutes in the cart's timezone
+```
+
+**Setup.** Run [`supabase/attendance.sql`](supabase/attendance.sql) and
+[`supabase/admin.sql`](supabase/admin.sql) after `schema.sql`. Both are additive
+and idempotent, so they are safe against a database that already holds photos.
+Paste them into the Supabase SQL editor, or apply them from here:
+
+```bash
+npm run db:migrate supabase/attendance.sql supabase/admin.sql
+```
+
+The `db:migrate` route needs `SUPABASE_ACCESS_TOKEN` in `.env.local` — a
+personal access token from
+[supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens),
+which is a different secret from `SUPABASE_SECRET_KEY`. PostgREST cannot execute
+DDL and the secret key is not a Postgres credential, so
+[`scripts/db-migrate.mjs`](scripts/db-migrate.mjs) goes through the Management
+API instead. That token reaches every project on the account, so keep it local —
+it is never needed by the deployed app, and nothing else reads it.
+
+Then open `/admin`. While the `staff` table is empty the page offers to make the
+signed-in account the first admin — managing staff needs a role and granting a
+role needs the panel, so the first one has to bootstrap. That offer disappears
+the moment any staff row exists.
+
+From there, carts and staff are managed in the UI; no SQL is needed again. Add
+each cart **while standing at it** and press "Use my current location" rather
+than typing coordinates. To enrol someone, they sign in, open `/attendance`, and
+send you the Clerk user id the page prints.
+
+No new environment variables are needed to *run* the app: attendance uses the
+storage and Supabase config that is already there.
+
+**Tolerance is per cart.** `carts.radius_m` is how far from that cart's pin a
+punch still counts — 100–150m absorbs ordinary phone GPS slop. It is set per
+cart rather than globally because a cart on an open street and one inside a
+market do not need the same allowance. With several carts, keep each radius well
+under the distance to the nearest other cart, or someone standing at one could
+punch for the other; staff are matched to their *assigned* cart, so the failure
+shows up as a punch accepted at the wrong place rather than a rejection.
+
+**Geofencing is a deterrent, not proof.** Coordinates come from the browser and
+a determined user can override them, exactly as the `photos` table already
+notes. Two things narrow the gap: a fix coarser than `MAX_ACCURACY_M` (100m) is
+refused outright, so a desktop reporting ±2km cannot "land inside" a 150m
+circle by luck, and `distance_m` is stored on every punch so an audit can see
+how close each one really was.
+
+**Times are per cart.** `carts.timezone` drives both the business date a punch
+belongs to and the lateness calculation, so carts in different zones each
+report their own local day. That math lives in the `attendance_derived`
+trigger rather than in JS, because Postgres does it correctly.
+
+## Dress-code checking
+
+A check-in queues a uniform verdict. **Attendance never waits for it** — the
+punch is recorded and returned, and the verdict is attached a second or two
+later by a background worker.
+
+```
+POST /api/attendance (kind=in)
+   │  record punch ─────────────▶ 201 to the staff member
+   │  queue dress_checks row
+   ▼
+after()  ──▶ runDressCheckBatch()     ← fast path, ~2s
+Vercel Cron (every minute) ──▶ same      ← durable path: retries, bursts, crashes
+   │
+   │  claim_dress_checks()  ← FOR UPDATE SKIP LOCKED, so the two never
+   │                          pay for the same verdict twice
+   ▼
+Gemini (one call per batch of 8) ──▶ verdict written to dress_checks
+```
+
+The staff screen polls while a verdict is pending and stops once it settles.
+
+**Setup.** Run [`supabase/dress-checks.sql`](supabase/dress-checks.sql), then
+set `GEMINI_API_KEY` and `CRON_SECRET` (see `.env.local.example`). On Vercel,
+add both under Settings → Environment Variables; the schedule itself comes from
+[`vercel.json`](vercel.json) and Vercel presents `CRON_SECRET` as a bearer
+token, which the route checks. Without that check the worker — and the spend
+behind it — would be triggerable by anyone who found the path.
+
+Uniforms are described in words, per cart, at `/admin`. That description is
+injected into the prompt verbatim, so how it is worded matters more than any
+other setting here.
+
+### Why it costs almost nothing
+
+Five choices, in rough order of how much they save:
+
+- **`thinkingLevel: "minimal"`.** Thinking tokens bill at the *output* rate and
+  "is a cap present" needs no reasoning. This is also why the default model is
+  Flash-Lite: `gemini-3.8-flash` cannot go below `"low"`.
+- **384px images.** Gemini charges a flat 258 tokens when both sides are ≤384px
+  and tiles anything larger. The 640px evidence photo measures 1,032 tokens for
+  the identical verdict, so the browser sends a second, smaller copy purely for
+  the model — see `MODEL_MAX_EDGE` in [src/lib/image.ts](src/lib/image.ts).
+- **Batches of 8.** One call, one shared instruction block, and eight times the
+  headroom against the requests-per-minute ceiling during the morning rush.
+- **Check-outs are never checked.** Re-verifying a uniform at the end of a shift
+  costs a call and tells you nothing new. This halves the volume outright.
+- **Tiny output.** Single-character enums, and a written reason only when
+  something actually failed.
+
+A daily cap (`GEMINI_DAILY_CALL_CAP`) backstops all of it: past the ceiling,
+checks stay queued rather than being dropped, so a runaway loop costs nothing
+and the work resumes the next day.
+
+### What the model is and isn't asked
+
+It reports **observations** — cap, apron, shirt, and whether the background
+looks like a food cart — each as `y`, `n`, or `?`. Which of those are mandatory
+is applied afterwards in `verdictFor`, from the cart's uniform profile, so
+changing policy never means rewriting the prompt.
+
+`?` is a first-class answer and the prompt encourages it. A forced yes/no on a
+dark or distant photo produces a confident guess, and a wrong "no" accuses
+someone who did nothing wrong — an unclear verdict goes to a person instead.
+
+Logo authenticity is deliberately **not** checked. At 384px a cap badge is a
+handful of pixels; asking would yield a confident answer that is not grounded in
+anything the image actually contains.
+
 ## Deploying to Vercel
 
 Import the repo at [vercel.com/new](https://vercel.com/new). Next.js is detected
@@ -174,6 +320,22 @@ as well as production.
 | [src/app/api/photos/route.ts](src/app/api/photos/route.ts) | `GET` list, `POST` upload |
 | [src/lib/photos.ts](src/lib/photos.ts) | Validation and metadata; the core logic |
 | [src/lib/storage/](src/lib/storage/) | Swappable Supabase / Cloudinary backends |
+| [src/app/attendance/page.tsx](src/app/attendance/page.tsx) | Punch screen |
+| [src/components/AttendancePunch.tsx](src/components/AttendancePunch.tsx) | Live geofence readout, capture, punch |
+| [src/app/api/attendance/route.ts](src/app/api/attendance/route.ts) | `GET` today's status, `POST` a punch |
+| [src/lib/attendance/service.ts](src/lib/attendance/service.ts) | Staff lookup, session rules, punch recording |
+| [src/lib/attendance/geofence.ts](src/lib/attendance/geofence.ts) | Haversine distance, shared by both sides |
+| [src/lib/image.ts](src/lib/image.ts) | Capture sizing — evidence at 640px, model at 384px |
+| [src/app/admin/page.tsx](src/app/admin/page.tsx) | Cart and staff management, role-gated |
+| [src/app/admin/actions.ts](src/app/admin/actions.ts) | Server Actions; each re-checks the role itself |
+| [src/components/admin/](src/components/admin/) | Cart editor with "use my location", staff editor |
+| [src/lib/attendance/admin.ts](src/lib/attendance/admin.ts) | Admin queries and the first-admin bootstrap |
+| [supabase/attendance.sql](supabase/attendance.sql) | Carts, staff, punches, dress-check queue |
+| [src/lib/gemini/dresscode.ts](src/lib/gemini/dresscode.ts) | The batched model call, schema, and verdict policy |
+| [src/lib/attendance/dress-checks.ts](src/lib/attendance/dress-checks.ts) | Queue: enqueue, claim, judge, record spend |
+| [src/app/api/cron/dress-checks/route.ts](src/app/api/cron/dress-checks/route.ts) | Durable worker, bearer-token gated |
+| [supabase/dress-checks.sql](supabase/dress-checks.sql) | Atomic claim RPC and queue columns |
+| [scripts/db-migrate.mjs](scripts/db-migrate.mjs) | Applies .sql files via the Management API |
 
 ## Notes on versions
 

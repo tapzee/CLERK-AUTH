@@ -52,6 +52,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <div className="flex items-center gap-1.5 text-sm">
                 <Show when="signed-in">
                   <Link
+                    href="/attendance"
+                    className="rounded-full px-3.5 py-1.5 text-muted transition hover:bg-surface-muted hover:text-foreground"
+                  >
+                    Attendance
+                  </Link>
+                  <Link
                     href="/dashboard"
                     className="rounded-full px-3.5 py-1.5 text-muted transition hover:bg-surface-muted hover:text-foreground"
                   >

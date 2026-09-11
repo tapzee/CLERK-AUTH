@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "node scripts/db-migrate.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.1",
+    "@google/genai": "^2.22.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@supabase/supabase-js": "^2.109.0",
     "cloudinary": "^2.11.0",

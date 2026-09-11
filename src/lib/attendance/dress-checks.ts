@@ -1,0 +1,313 @@
+import "server-only";
+
+import { checkUniforms, verdictFor, type CheckSubject, type UniformSpec } from "@/lib/gemini/dresscode";
+import { serverEnv } from "@/lib/env";
+import { providerFor, StorageError } from "@/lib/storage";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+
+/** How many photos ride in one model call. */
+const BATCH_SIZE = 8;
+
+const DEFAULT_UNIFORM: UniformSpec = {
+  promptNotes: null,
+  requiredItems: { cap: true, apron: true, shirt: true },
+};
+
+export type DressCheckSummary = {
+  status: "queued" | "running" | "done" | "failed" | "skipped";
+  verdict: "pass" | "fail" | "unclear" | null;
+  items: Record<string, string> | null;
+  reason: string | null;
+};
+
+/**
+ * Queues a verdict for a check-in.
+ *
+ * Check-outs are never queued: re-verifying a uniform at the end of a shift
+ * costs a model call and tells the business nothing it did not already learn
+ * at check-in.
+ */
+export async function enqueueDressCheck(input: {
+  attendanceEventId: string;
+  photoId: string;
+  modelPhotoId: string | null;
+}): Promise<void> {
+  const { error } = await supabaseAdmin().from("dress_checks").insert({
+    attendance_event_id: input.attendanceEventId,
+    photo_id: input.photoId,
+    model_photo_id: input.modelPhotoId,
+    // Without a downscaled copy there is nothing cheap to send, so the row is
+    // recorded as skipped rather than silently costing four times as much.
+    status: input.modelPhotoId ? "queued" : "skipped",
+  });
+
+  if (error) {
+    // A punch must not fail because its verdict could not be queued.
+    console.error("[dress-checks] enqueue failed", error.message);
+  }
+}
+
+/** The verdict attached to one punch, for the staff-facing screen. */
+export async function getDressCheck(
+  attendanceEventId: string,
+): Promise<DressCheckSummary | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("dress_checks")
+    .select("status, verdict, items, reason")
+    .eq("attendance_event_id", attendanceEventId)
+    .maybeSingle<DressCheckSummary>();
+
+  if (error) {
+    throw new StorageError(`Could not read the dress check: ${error.message}`, 502);
+  }
+  return data;
+}
+
+/**
+ * Model calls made today, against the daily cap.
+ *
+ * Counting completed rows rather than keeping a separate counter means the
+ * number cannot drift away from what actually happened.
+ */
+async function callsToday(): Promise<number> {
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+
+  const { count, error } = await supabaseAdmin()
+    .from("dress_checks")
+    .select("id", { count: "exact", head: true })
+    .not("completed_at", "is", null)
+    .gte("completed_at", since.toISOString());
+
+  if (error) {
+    throw new StorageError(`Could not read today's usage: ${error.message}`, 502);
+  }
+  return count ?? 0;
+}
+
+type ClaimedRow = { id: string; attendance_event_id: string; model_photo_id: string | null };
+
+type Job = {
+  id: string;
+  uniformKey: string;
+  uniform: UniformSpec;
+  bytes: Uint8Array;
+  mimeType: string;
+};
+
+/**
+ * Pulls the photo bytes through a signed URL rather than a provider-specific
+ * download call, so this works the same whether the bytes live in Supabase
+ * Storage or Cloudinary.
+ */
+async function loadBytes(
+  provider: string,
+  path: string,
+): Promise<Uint8Array | null> {
+  const urls = await providerFor(provider).signedUrls([path]);
+  const url = urls.get(path);
+  if (!url) return null;
+
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+/** Gathers everything a claimed row needs before it can be judged. */
+async function hydrate(rows: ClaimedRow[]): Promise<Job[]> {
+  const supabase = supabaseAdmin();
+
+  const photoIds = rows.map((row) => row.model_photo_id).filter((id): id is string => !!id);
+  const eventIds = rows.map((row) => row.attendance_event_id);
+
+  const [photos, events] = await Promise.all([
+    supabase
+      .from("photos")
+      .select("id, provider, storage_path, content_type")
+      .in("id", photoIds),
+    supabase
+      .from("attendance_events")
+      .select("id, carts!inner ( uniform_profile_id )")
+      .in("id", eventIds),
+  ]);
+
+  type PhotoRow = { id: string; provider: string; storage_path: string; content_type: string };
+  type CartEmbed = { uniform_profile_id: string | null };
+  // PostgREST returns a many-to-one embed as an object, but the generated types
+  // cannot prove the cardinality and widen it to an array. Accept either rather
+  // than asserting one shape and breaking on the other.
+  type EventRow = { id: string; carts: CartEmbed | CartEmbed[] | null };
+
+  const photoById = new Map(
+    ((photos.data ?? []) as PhotoRow[]).map((row) => [row.id, row]),
+  );
+  const profileByEvent = new Map(
+    ((events.data ?? []) as unknown as EventRow[]).map((row) => {
+      const cart = Array.isArray(row.carts) ? row.carts[0] : row.carts;
+      return [row.id, cart?.uniform_profile_id ?? null];
+    }),
+  );
+
+  // One fetch for every distinct uniform in the batch, not one per check.
+  const profileIds = [...new Set([...profileByEvent.values()].filter((id): id is string => !!id))];
+  const uniformById = new Map<string, UniformSpec>();
+
+  if (profileIds.length > 0) {
+    const { data } = await supabase
+      .from("uniform_profiles")
+      .select("id, prompt_notes, required_items")
+      .in("id", profileIds);
+
+    type ProfileRow = {
+      id: string;
+      prompt_notes: string | null;
+      required_items: Record<string, boolean> | null;
+    };
+    for (const row of (data ?? []) as ProfileRow[]) {
+      uniformById.set(row.id, {
+        promptNotes: row.prompt_notes,
+        requiredItems: row.required_items ?? DEFAULT_UNIFORM.requiredItems,
+      });
+    }
+  }
+
+  const jobs: Job[] = [];
+  for (const row of rows) {
+    const photo = row.model_photo_id ? photoById.get(row.model_photo_id) : undefined;
+    if (!photo) continue;
+
+    const bytes = await loadBytes(photo.provider, photo.storage_path);
+    if (!bytes) continue;
+
+    const profileId = profileByEvent.get(row.attendance_event_id) ?? null;
+    jobs.push({
+      id: row.id,
+      uniformKey: profileId ?? "default",
+      uniform: (profileId && uniformById.get(profileId)) || DEFAULT_UNIFORM,
+      bytes,
+      mimeType: photo.content_type,
+    });
+  }
+  return jobs;
+}
+
+async function markFailed(ids: string[], message: string): Promise<void> {
+  if (ids.length === 0) return;
+  await supabaseAdmin()
+    .from("dress_checks")
+    .update({ status: "failed", error: message.slice(0, 500), claimed_at: null })
+    .in("id", ids);
+}
+
+export type WorkerReport = {
+  claimed: number;
+  judged: number;
+  failed: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  note?: string;
+};
+
+/**
+ * Processes one batch of pending checks.
+ *
+ * Called both by the cron schedule and, for latency, by `after()` on the punch
+ * that created the row. Claiming is atomic, so the two racing is harmless.
+ */
+export async function runDressCheckBatch(
+  batchSize = BATCH_SIZE,
+): Promise<WorkerReport> {
+  const empty: WorkerReport = {
+    claimed: 0, judged: 0, failed: 0, calls: 0, inputTokens: 0, outputTokens: 0,
+  };
+
+  const used = await callsToday();
+  if (used >= serverEnv.dressCheckDailyCap) {
+    // Left queued rather than skipped: tomorrow's run picks them up, and the
+    // cap stops a runaway loop instead of losing the work.
+    return { ...empty, note: `daily cap of ${serverEnv.dressCheckDailyCap} reached` };
+  }
+
+  const { data, error } = await supabaseAdmin().rpc("claim_dress_checks", {
+    batch_size: batchSize,
+  });
+
+  if (error) {
+    throw new StorageError(`Could not claim dress checks: ${error.message}`, 502);
+  }
+
+  const rows = (data ?? []) as ClaimedRow[];
+  if (rows.length === 0) return empty;
+
+  const jobs = await hydrate(rows);
+
+  // Anything that could not be hydrated has no image to judge.
+  const unusable = rows.filter((row) => !jobs.some((job) => job.id === row.id));
+  await markFailed(unusable.map((row) => row.id), "Could not load the photo to judge.");
+
+  const report: WorkerReport = { ...empty, claimed: rows.length, failed: unusable.length };
+
+  // A batch can span carts with different uniforms; each group is its own call
+  // so every photo is judged against the right description.
+  const groups = new Map<string, Job[]>();
+  for (const job of jobs) {
+    groups.set(job.uniformKey, [...(groups.get(job.uniformKey) ?? []), job]);
+  }
+
+  for (const group of groups.values()) {
+    const subjects: CheckSubject[] = group.map((job, index) => ({
+      index: index + 1,
+      bytes: job.bytes,
+      mimeType: job.mimeType,
+    }));
+
+    try {
+      const result = await checkUniforms(subjects, group[0].uniform);
+      report.calls += 1;
+      report.inputTokens += result.inputTokens;
+      report.outputTokens += result.outputTokens;
+
+      const byIndex = new Map(result.observations.map((o) => [o.index, o]));
+
+      for (const [position, job] of group.entries()) {
+        const observation = byIndex.get(position + 1);
+        if (!observation) {
+          await markFailed([job.id], "The model returned no result for this photo.");
+          report.failed += 1;
+          continue;
+        }
+
+        const { verdict, items } = verdictFor(observation, job.uniform.requiredItems);
+        const { error: writeError } = await supabaseAdmin()
+          .from("dress_checks")
+          .update({
+            status: "done",
+            verdict,
+            items: { ...items, at_cart: observation.atCart },
+            reason: verdict === "pass" ? null : observation.why,
+            model: result.model,
+            // Attributed evenly: the call is shared, and a per-photo split is
+            // close enough for spend tracking.
+            input_tokens: Math.round(result.inputTokens / group.length),
+            output_tokens: Math.round(result.outputTokens / group.length),
+            error: null,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+
+        if (writeError) {
+          report.failed += 1;
+          continue;
+        }
+        report.judged += 1;
+      }
+    } catch (modelError) {
+      const message = modelError instanceof Error ? modelError.message : "Model call failed.";
+      await markFailed(group.map((job) => job.id), message);
+      report.failed += group.length;
+    }
+  }
+
+  return report;
+}
