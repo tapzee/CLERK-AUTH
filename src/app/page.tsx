@@ -1,77 +1,79 @@
 import Link from "next/link";
-import { Show, SignUpButton } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
+import { SignUpButton } from "@clerk/nextjs";
 
-const features = [
+import { can } from "@/lib/auth/rbac";
+import { getViewerState } from "@/lib/auth/viewer";
+import { Card } from "@/components/ui/primitives";
+
+export const dynamic = "force-dynamic";
+
+const FEATURES = [
   {
-    title: "Blink to capture",
-    body: "Hold your eyes shut for a moment and the shutter fires on its own. Face detection runs on your device — no frame is uploaded for it.",
+    title: "A selfie is the whole check-in",
+    body: "Sign in, stand at the cart, take one photo. The time, the place and the uniform are all read off that single action.",
   },
   {
-    title: "Tagged with where you were",
-    body: "Each photo records the device's coordinates and how accurate that fix was, so you always know whether it was GPS or a rough guess.",
+    title: "Out of uniform means no punch",
+    body: "The photo is checked for a cap, apron, shirt and logo before anything is recorded. Miss one and you are told which, and asked to try again.",
   },
   {
-    title: "Private by default",
-    body: "The bucket refuses unsigned reads. Photos are served over signed URLs that expire, and the storage key never reaches the browser.",
+    title: "Late is decided by the manager",
+    body: "Each worker gets a shift time and a grace window. Arrive inside it and you are on time; past it and the day is marked late.",
+  },
+  {
+    title: "Pay follows attendance",
+    body: "A monthly salary prorated by the days actually worked, less whatever a late day costs. The manager prepares it, the owner approves it.",
   },
 ];
 
-export default function Home() {
+/**
+ * The signed-out pitch.
+ *
+ * Anybody already signed in is sent where they actually work rather than being
+ * shown marketing copy about the product they are standing in.
+ */
+export default async function Home() {
+  const state = await getViewerState();
+
+  if (state.status === "enrolled") {
+    redirect(can(state.viewer.role, "console:read") ? "/manage" : "/punch");
+  }
+  if (state.status === "not-enrolled") {
+    redirect("/punch");
+  }
+
   return (
-    <div className="space-y-20 py-8">
+    <div className="space-y-16 py-8">
       <section className="mx-auto max-w-2xl text-center">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
-          Camera · Location · Private storage
+          Attendance · Uniform · Payroll
         </p>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-          Capture a moment, keep it private.
+          One selfie, and the shift is on the record.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base/7 text-muted text-pretty">
-          Sign in, take a photo straight from your camera, and it lands in a private
-          bucket that only you can read.
+          Staff check in from the cart with a photo. The uniform is checked before the
+          punch counts, lateness is measured against the shift their manager set, and
+          the month&rsquo;s pay falls out of the attendance record.
         </p>
 
         <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <Show when="signed-in">
-            <Link
-              href="/camera"
-              className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:opacity-90"
-            >
-              Open the camera
-            </Link>
-            <Link
-              href="/dashboard"
-              className="rounded-full border border-border px-6 py-3 text-sm font-medium transition hover:bg-surface-muted"
-            >
-              View gallery
-            </Link>
-          </Show>
-
-          <Show when="signed-out">
-            <SignUpButton mode="modal">
-              <button className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:opacity-90">
-                Get started
-              </button>
-            </SignUpButton>
-            <Link
-              href="/sign-in"
-              className="rounded-full border border-border px-6 py-3 text-sm font-medium transition hover:bg-surface-muted"
-            >
-              I have an account
-            </Link>
-          </Show>
+          <SignUpButton mode="modal">
+            <button className="btn btn-primary px-6 py-3">Get started</button>
+          </SignUpButton>
+          <Link href="/sign-in" className="btn btn-ghost px-6 py-3">
+            I have an account
+          </Link>
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        {features.map((feature) => (
-          <div
-            key={feature.title}
-            className="rounded-2xl border border-border bg-surface p-5"
-          >
+      <section className="grid gap-4 sm:grid-cols-2">
+        {FEATURES.map((feature) => (
+          <Card key={feature.title} className="p-5">
             <h2 className="text-sm font-semibold">{feature.title}</h2>
             <p className="mt-2 text-sm/6 text-muted text-pretty">{feature.body}</p>
-          </div>
+          </Card>
         ))}
       </section>
     </div>

@@ -99,6 +99,18 @@ export const serverEnv = {
     return value && allowed.includes(value) ? value : "MEDIA_RESOLUTION_HIGH";
   },
   /**
+   * How long the punch route waits for a uniform verdict before giving up.
+   *
+   * Somebody is stood at the cart while this runs, so it cannot be generous.
+   * Past this the punch is recorded anyway and flagged for a manager, and the
+   * photo is left in the queue for the worker to judge a minute later -- the
+   * business never stops clocking in because an API was slow.
+   */
+  get uniformCheckTimeoutMs() {
+    const parsed = Number(process.env.UNIFORM_CHECK_TIMEOUT_MS);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 9_000;
+  },
+  /**
    * Hard ceiling on model calls per day, across the whole deployment.
    *
    * A retry loop or a runaway cron cannot cost more than this. Checks beyond it
@@ -111,5 +123,22 @@ export const serverEnv = {
   /** Shared secret Vercel Cron presents; without it the worker is public. */
   get cronSecret() {
     return required("CRON_SECRET");
+  },
+
+  /**
+   * Email addresses that are owners regardless of what the staff table says.
+   *
+   * Granting a role needs the console and reaching the console needs a role.
+   * This allow-list is what breaks that cycle on a fresh deployment — the row
+   * is created the first time one of these addresses signs in. Everyone else is
+   * enrolled from inside the console.
+   *
+   * Comma-separated, matched case-insensitively.
+   */
+  get adminEmails(): string[] {
+    return (process.env.ADMIN_EMAILS ?? "tapzee.in@gmail.com")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
   },
 };

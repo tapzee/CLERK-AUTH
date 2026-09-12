@@ -9,56 +9,23 @@ import {
 } from "@google/genai";
 
 import { serverEnv } from "@/lib/env";
+import {
+  ITEM_LABELS,
+  parseGrade,
+  type Grades,
+  type ItemGrade,
+  type ItemKey,
+} from "@/lib/uniform/items";
 
 /**
- * How well one item is worn.
+ * Asking Gemini how well a uniform is being worn.
  *
- * Four buckets, not a number. A model asked to rate an item 0-100 returns
- * something that looks precise and moves between runs on the same photo; asked
- * whether something is worn properly, worn badly, or not worn, it is steady.
- * More buckets than this would add noise rather than detail.
+ * This module knows about prompts, images and tokens, and nothing about what a
+ * score means -- the vocabulary and the arithmetic live in
+ * `src/lib/uniform/items.ts`, which the browser can import too.
  */
-export type ItemGrade = "g" | "p" | "n" | "?";
 
-export const GRADE_LABELS: Record<ItemGrade, string> = {
-  g: "worn properly",
-  p: "worn badly",
-  n: "not worn",
-  "?": "could not tell",
-};
-
-/** How much credit each grade earns toward the score. */
-const GRADE_CREDIT: Record<Exclude<ItemGrade, "?">, number> = {
-  g: 1,
-  p: 0.5,
-  n: 0,
-};
-
-export type ItemKey = "cap" | "apron" | "shirt" | "logo" | "neat";
-
-export const ITEM_KEYS: readonly ItemKey[] = ["cap", "apron", "shirt", "logo", "neat"];
-
-/** The items an admin can attach a reference photo to. */
-export const REFERENCE_KEYS: readonly ItemKey[] = ["cap", "apron", "shirt", "logo"];
-
-export const ITEM_LABELS: Record<ItemKey, string> = {
-  cap: "Cap or hairnet",
-  apron: "Apron",
-  shirt: "Uniform shirt",
-  logo: "Company logo",
-  neat: "Overall turnout",
-};
-
-/** What "worn badly" means for each item, spelled out for the model. */
-const POOR_EXAMPLES: Record<ItemKey, string> = {
-  cap: "on the head but pushed back, tilted, or leaving most of the hair uncovered",
-  apron: "on but untied, hanging off one shoulder, twisted, or visibly dirty",
-  shirt: "the right shirt but crumpled, badly stained, or worn open over something else",
-  logo: "present but heavily creased, faded, or mostly hidden behind a strap or fold",
-  neat: "uniform broadly on, but scruffy — untucked, stained, or dishevelled",
-};
-
-/** A photo of the real item, uploaded by an admin. */
+/** A photo of the real item, uploaded by an owner. */
 export type ReferenceImage = {
   kind: ItemKey;
   bytes: Uint8Array;
@@ -70,7 +37,7 @@ export type UniformSpec = {
   promptNotes: string | null;
   /** Each item's share of the score. Zero means reported but not scored. */
   weights: Record<ItemKey, number>;
-  /** Score at or above which the staff member counts as compliant. */
+  /** Score at or above which the worker counts as compliant. */
   passScore: number;
   references: ReferenceImage[];
 };
@@ -84,8 +51,8 @@ export type CheckSubject = {
 
 export type Observation = {
   index: number;
-  items: Record<ItemKey, ItemGrade>;
-  /** Whether the surroundings look like a food cart — a free second signal. */
+  items: Grades;
+  /** Whether the surroundings look like a food cart -- a free second signal. */
   atCart: ItemGrade;
   why: string | null;
 };
@@ -100,12 +67,21 @@ export type BatchResult = {
 
 const GRADES = ["g", "p", "n", "?"];
 
+/** What "worn badly" means for each item, spelled out for the model. */
+const POOR_EXAMPLES: Record<ItemKey, string> = {
+  cap: "on the head but pushed back, tilted, or leaving most of the hair uncovered",
+  apron: "on but untied, hanging off one shoulder, twisted, or visibly dirty",
+  shirt: "the right shirt but crumpled, badly stained, or worn open over something else",
+  logo: "present but heavily creased, faded, or mostly hidden behind a strap or fold",
+  neat: "uniform broadly on, but scruffy -- untucked, stained, or dishevelled",
+};
+
 /**
  * How much of each reference image the model is given to look at.
  *
- * Measured on this project's own photos: LOW ≈ 266 tokens, MEDIUM ≈ 540,
- * HIGH ≈ 1064, ULTRA_HIGH ≈ 2160. In Gemini 3.x this — not the pixel
- * dimensions — is what sets the cost of an image. References are clean, close
+ * Measured on this project's own photos: LOW = 266 tokens, MEDIUM = 540,
+ * HIGH = 1064, ULTRA_HIGH = 2160. In Gemini 3.x this -- not the pixel
+ * dimensions -- is what sets the cost of an image. References are clean, close
  * product shots, so they do not need what a staff photo needs.
  */
 const REFERENCE_RESOLUTION = PartMediaResolutionLevel.MEDIA_RESOLUTION_MEDIUM;
@@ -163,7 +139,7 @@ function instructions(uniform: UniformSpec, count: number, hasReferences: boolea
       "Reference photos of the real items follow, each labelled REFERENCE.",
       "Judge the staff photos against these, not against a generic idea of a",
       "cap or apron. For the logo, the staff member's badge or print must match",
-      "the reference logo — a different logo, or a plain garment, is not a match.",
+      "the reference logo -- a different logo, or a plain garment, is not a match.",
     );
   }
 
@@ -203,10 +179,6 @@ function genai(): GoogleGenAI {
   return client;
 }
 
-function asGrade(value: unknown): ItemGrade {
-  return value === "g" || value === "p" || value === "n" ? value : "?";
-}
-
 function imagePart(
   bytes: Uint8Array,
   mimeType: string,
@@ -221,13 +193,20 @@ function imagePart(
 /**
  * Judges a batch of photos in one request.
  *
- * Batching is what keeps the morning punch rush inside the request-per-minute
- * ceiling, and it amortises the instruction block and the reference photos
- * across every staff member in the call rather than resending them each time.
+ * Batching amortises the instruction block and the reference photos across
+ * every worker in the call rather than resending them each time. The punch
+ * screen calls this with a single subject because somebody is standing there
+ * waiting; the queue worker calls it with up to eight.
  */
 export async function checkUniforms(
   subjects: CheckSubject[],
   uniform: UniformSpec,
+  /**
+   * Gives up on a slow call. Used by the punch route, where somebody is stood
+   * at the cart waiting -- note that aborting is client-side only, so the call
+   * still bills if the service had already started work on it.
+   */
+  signal?: AbortSignal,
 ): Promise<BatchResult> {
   if (subjects.length === 0) {
     return { observations: [], model: serverEnv.geminiModel, inputTokens: 0, outputTokens: 0 };
@@ -243,7 +222,7 @@ export async function checkUniforms(
   ];
 
   for (const reference of references) {
-    parts.push({ text: `REFERENCE — ${ITEM_LABELS[reference.kind]}:` });
+    parts.push({ text: `REFERENCE -- ${ITEM_LABELS[reference.kind]}:` });
     parts.push(imagePart(reference.bytes, reference.mimeType, REFERENCE_RESOLUTION));
   }
 
@@ -265,6 +244,7 @@ export async function checkUniforms(
     model,
     contents: [{ role: "user", parts }],
     config: {
+      abortSignal: signal,
       // A compliance check should give the same answer twice for the same photo.
       temperature: 0,
       responseMimeType: "application/json",
@@ -275,9 +255,7 @@ export async function checkUniforms(
   });
 
   const raw = response.text;
-  if (!raw) {
-    throw new Error("The model returned an empty response.");
-  }
+  if (!raw) throw new Error("The model returned an empty response.");
 
   let parsed: { results?: unknown };
   try {
@@ -301,13 +279,13 @@ export async function checkUniforms(
     observations.push({
       index,
       items: {
-        cap: asGrade(row.cap),
-        apron: asGrade(row.apron),
-        shirt: asGrade(row.shirt),
-        logo: asGrade(row.logo),
-        neat: asGrade(row.neat),
+        cap: parseGrade(row.cap),
+        apron: parseGrade(row.apron),
+        shirt: parseGrade(row.shirt),
+        logo: parseGrade(row.logo),
+        neat: parseGrade(row.neat),
       },
-      atCart: asGrade(row.at_cart),
+      atCart: parseGrade(row.at_cart),
       why: why || null,
     });
   }
@@ -321,65 +299,4 @@ export async function checkUniforms(
     // what the call actually cost.
     outputTokens: (usage?.candidatesTokenCount ?? 0) + (usage?.thoughtsTokenCount ?? 0),
   };
-}
-
-export type Scored = {
-  /** Out of 100, counting an unsure item as half credit. */
-  score: number;
-  /** Out of 100, counting every unsure item as worn properly. */
-  best: number;
-  /** Out of 100, counting every unsure item as not worn. */
-  worst: number;
-  verdict: "pass" | "fail" | "unclear";
-};
-
-function weightedScore(
-  items: Record<ItemKey, ItemGrade>,
-  weights: Record<ItemKey, number>,
-  unsure: number,
-): number {
-  let earned = 0;
-  let total = 0;
-
-  for (const key of ITEM_KEYS) {
-    const weight = weights[key] ?? 0;
-    if (weight <= 0) continue;
-
-    total += weight;
-    const grade = items[key];
-    earned += weight * (grade === "?" ? unsure : GRADE_CREDIT[grade]);
-  }
-
-  // Nothing is scored, so nothing can fail.
-  if (total === 0) return 100;
-  return Math.round((earned / total) * 100);
-}
-
-/**
- * Turns graded observations into a score out of 100.
- *
- * The model grades how each item is worn; the arithmetic happens here. Asking
- * the model for the number itself would give something that looks precise and
- * is not reproducible — the same photo can come back 78 one minute and 85 the
- * next. Deriving it from grades, using weights an admin set, gives a score that
- * is stable, explainable ("apron worn badly, half of 25"), and adjustable
- * without touching the prompt.
- *
- * Three numbers, not one: an unsure item would otherwise be buried in a single
- * average. The verdict only commits to pass or fail when the best and worst
- * readings agree, so a photo too poor to judge goes to a person instead of
- * being guessed at.
- */
-export function scoreObservation(
-  observation: Observation,
-  uniform: Pick<UniformSpec, "weights" | "passScore">,
-): Scored {
-  const best = weightedScore(observation.items, uniform.weights, 1);
-  const worst = weightedScore(observation.items, uniform.weights, 0);
-  const score = weightedScore(observation.items, uniform.weights, 0.5);
-
-  const verdict =
-    worst >= uniform.passScore ? "pass" : best < uniform.passScore ? "fail" : "unclear";
-
-  return { score, best, worst, verdict };
 }

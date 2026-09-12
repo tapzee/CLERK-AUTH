@@ -1,12 +1,14 @@
+import type { Role } from "@/lib/auth/rbac";
+
 /**
- * Shared between client and server, so this module must stay free of any
- * `server-only` import.
+ * The attendance vocabulary shared between the browser and the server.
+ *
+ * Must stay free of any `server-only` import: the punch screen and the console
+ * tables both render these shapes.
  */
 
 /** A punch is either the start or the end of a shift. */
 export type PunchKind = "in" | "out";
-
-export type StaffRole = "staff" | "manager" | "admin";
 
 export type Cart = {
   id: string;
@@ -17,25 +19,38 @@ export type Cart = {
   timezone: string;
 };
 
-export type Staff = {
+/** The person punching, as the punch screen needs them. */
+export type Worker = {
   id: string;
   fullName: string;
-  role: StaffRole;
+  role: Role;
+  /** Wall-clock times in the cart's timezone. Null means no fixed shift. */
   shiftStart: string | null;
   shiftEnd: string | null;
+  /** Minutes past `shiftStart` that still count as on time. */
+  graceMinutes: number;
   cart: Cart;
 };
 
-/** Where a punch's uniform verdict has got to. Check-outs never have one. */
-export type DressCheck = {
+/** Where a punch's uniform verdict got to. Check-outs never have one. */
+export type UniformVerdict = {
   status: "queued" | "running" | "done" | "failed" | "skipped";
   verdict: "pass" | "fail" | "unclear" | null;
-  /** Per-item outcome, e.g. {"cap": "y", "apron": "n"}. */
+  /** Per-item grades, e.g. {"cap": "g", "apron": "p"}. */
   items: Record<string, string> | null;
   reason: string | null;
   /** Out of 100, from the cart's uniform weights. Null until judged. */
   score: number | null;
 };
+
+/**
+ * Whether a person still has to look at this punch.
+ *
+ * "pending" is set when the punch was recorded without a settled verdict, which
+ * is the deliberate trade in this system: attendance is never blocked by an
+ * unavailable model, so the uncertainty is handed to a manager instead.
+ */
+export type ReviewStatus = "none" | "pending" | "cleared" | "flagged";
 
 export type AttendanceEvent = {
   id: string;
@@ -44,19 +59,24 @@ export type AttendanceEvent = {
   businessDate: string;
   distanceM: number | null;
   geofenceOk: boolean;
+  /** Raw minutes past the shift start, whether or not that counts as late. */
   lateByMinutes: number | null;
   earlyByMinutes: number | null;
-  dressCheck: DressCheck | null;
+  /** True once `lateByMinutes` exceeds the grace allowance. */
+  isLate: boolean;
+  graceMinutes: number | null;
+  reviewStatus: ReviewStatus;
+  dressCheck: UniformVerdict | null;
 };
 
 /** What the punch screen needs to decide which button to offer. */
 export type AttendanceStatus = {
-  staff: Staff;
+  worker: Worker;
   /** Today's punches in the cart's timezone, oldest first. */
   events: AttendanceEvent[];
   /** True between an 'in' with no matching 'out'. */
   onShift: boolean;
-  /** The punch the staff member can make right now. */
+  /** The punch the worker can make right now. */
   nextKind: PunchKind;
 };
 

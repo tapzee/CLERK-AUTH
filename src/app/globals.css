@@ -1,34 +1,60 @@
 @import "tailwindcss";
 
 /*
-  One warm accent for anything that captures or saves, everything else neutral.
-  A camera app should let the photo carry the colour, so the shell stays quiet.
+  One warm accent for anything that records or approves, everything else
+  neutral. Attendance screens are read at a glance on a phone in daylight, so
+  contrast is kept high and colour is reserved for status: green for on time,
+  amber for needs-a-look, red for refused.
 */
 :root {
-  --background: #fafaf9;
+  --background: #faf9f7;
   --surface: #ffffff;
-  --surface-muted: #f5f5f4;
-  --foreground: #1c1917;
-  --muted: #78716c;
-  --border: #e7e5e4;
-  --accent: #ea580c;
+  --surface-muted: #f4f2ef;
+  --foreground: #1b1917;
+  --muted: #6f6862;
+  --border: #e6e2dd;
+
+  --accent: #c2410c;
+  --accent-hover: #9a3412;
   --accent-foreground: #ffffff;
-  --danger: #dc2626;
+  --accent-soft: #fff1e9;
+
+  --danger: #be123c;
+  --danger-soft: #fff1f3;
   --success: #15803d;
+  --success-soft: #effaf1;
+  --warning: #b45309;
+  --warning-soft: #fff8eb;
+
+  --ring: #c2410c40;
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.05);
+  --shadow-raised: 0 4px 16px -4px rgb(28 25 23 / 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0c0a09;
-    --surface: #171513;
-    --surface-muted: #231f1d;
-    --foreground: #fafaf9;
-    --muted: #a8a29e;
-    --border: #2c2724;
+    --surface: #16130f;
+    --surface-muted: #221d18;
+    --foreground: #faf9f7;
+    --muted: #a29a92;
+    --border: #2c2620;
+
     --accent: #f97316;
-    --accent-foreground: #1c1917;
-    --danger: #f87171;
+    --accent-hover: #fb923c;
+    --accent-foreground: #1b1917;
+    --accent-soft: #2a1a0f;
+
+    --danger: #fb7185;
+    --danger-soft: #2a1219;
     --success: #4ade80;
+    --success-soft: #10231a;
+    --warning: #fbbf24;
+    --warning-soft: #271d0d;
+
+    --ring: #f9731650;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-raised: 0 4px 16px -4px rgb(0 0 0 / 0.5);
   }
 }
 
@@ -39,10 +65,19 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
+
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -50,8 +85,107 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  /* The scaffold hard-coded Arial here, which threw away the loaded Geist face. */
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+  A handful of component classes.
+
+  These exist where the same long utility string was being repeated in every
+  form -- a `.input` is read at a glance, twelve utilities on every field are
+  not. Anything used once stays as utilities on the element.
+*/
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  .input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    background: var(--background);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--foreground);
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+  .input:disabled {
+    opacity: 0.55;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background-color 120ms ease, opacity 120ms ease, border-color 120ms ease;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .btn-ghost {
+    border: 1px solid var(--border);
+    color: var(--foreground);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-muted);
+  }
+
+  .btn-danger {
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+    color: var(--danger);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger-soft);
+  }
+
+  /* Status chips: one shape, colour set by the caller. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
 }
 
 /* Respect users who have asked the OS to tone motion down. */

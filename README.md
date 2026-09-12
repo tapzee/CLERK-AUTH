@@ -1,27 +1,136 @@
-# Live Photos — Next.js + Clerk + Supabase (or Cloudinary)
+# Shift — attendance, uniform checking and payroll for food carts
 
-Sign in with Clerk, capture a photo from your device camera, and store it in a
-private bucket that only you can read.
+A worker signs in, stands at their cart, and takes one selfie. From that single
+action the system records **when** they arrived, **where** they were, and
+**whether they are in uniform** — and at the end of the month it turns that
+record into pay.
 
-## How it works
+Built on Next.js 16 (App Router), Clerk for authentication, Supabase for data
+and storage, and Gemini for the uniform check.
+
+---
+
+## The three roles
+
+Access is **role-based**, and roles are attached to the **email address** a
+person signs in with — so a manager can enrol somebody before that person has
+ever opened the app.
+
+| Role | Can do |
+| --- | --- |
+| **Staff** | Punch in and out with a selfie. See their own attendance and pay. |
+| **Manager** | Everything staff can, plus: set shift times, grace windows and salaries for their own cart; move the cart's geofence pin; review uniform verdicts the model could not settle; prepare payroll. |
+| **Owner** (`admin`) | Everything, across every cart, plus the two powers withheld from a manager: **granting roles** and **approving payroll**. |
+
+Roles are coarse labels; the code checks **permissions**, never
+`role === "admin"`. The whole table is one file,
+[`src/lib/auth/rbac.ts`](src/lib/auth/rbac.ts), so adding a capability is one
+entry rather than a hunt through pages for role comparisons that have drifted.
+
+A second axis, **scope**, decides *who* a role reaches — a manager holds
+`staff:write`, but only over their own cart. That is
+[`src/lib/manage/scope.ts`](src/lib/manage/scope.ts), and every scoped query
+goes through `listStaff`, so the rule is written once.
+
+### Separation of duties
+
+A manager sets salaries and prepares payroll but **cannot approve it**, and
+cannot hand out roles. Nobody — not even an owner — can change **their own**
+role: demoting yourself is a one-way door, because the permission you would need
+to undo it is the one you just gave away.
+
+### The first owner
+
+Granting a role needs the console, and reaching the console needs a role.
+`ADMIN_EMAILS` breaks that cycle: any address on that list gets an owner record
+the first time it signs in. It defaults to `tapzee.in@gmail.com`, and
+[`supabase/rbac.sql`](supabase/rbac.sql) seeds the row so it is already waiting.
+
+---
+
+## How a check-in works
+
+The order is deliberate, and it is **cheapest first** — a punch refused at step
+one pays for nothing.
+
+1. **Session rule.** Already checked in? Then the only thing on offer is
+   check-out. Pure arithmetic, no writes.
+2. **Geofence.** The browser reports a position; the server measures it against
+   the cart's pin and radius. A fix coarser than ±100 m is refused outright,
+   because a desktop reporting ±2 km "passes" a 150 m circle by luck.
+3. **Uniform check.** The selfie goes to Gemini with the cart's uniform and its
+   reference photos. This is where it differs from most attendance apps:
+
+   - **Pass** → the punch is recorded.
+   - **Fail** → **nothing is recorded.** The worker is told exactly what is
+     wrong ("no cap, apron worn badly") and the camera goes straight back up.
+     The rejected photo is still filed to `uniform_attempts`, so a manager can
+     see somebody tried four times before putting a cap on.
+   - **Can't tell** → the punch **is** recorded and flagged for a manager.
+   - **Model unavailable** (timeout, quota, outage) → the punch **is** recorded,
+     flagged, and left in a queue for the catch-up worker.
+
+4. **Write.** The photo lands in private storage and the event is inserted.
+   Postgres fills in the business date and the lateness figures on a trigger,
+   because both depend on the cart's timezone.
+
+### Attendance never depends on an API being up
+
+That is the governing trade. If the uniform check cannot answer within
+`UNIFORM_CHECK_TIMEOUT_MS` (9 s by default), the shift is still recorded and the
+uncertainty is handed to a person. Nobody loses a day's pay because Gemini was
+slow.
+
+The catch-up worker ([`dress-checks.ts`](src/lib/attendance/dress-checks.ts))
+then judges those photos in batches. A clean pass **un-flags** the punch on its
+own, so a manager only ever looks at what the model genuinely could not settle.
+
+### Late is decided by the manager
+
+Each worker has a shift start and a **grace window** (30 minutes by default).
+Arriving inside it is on time; past it, the day is marked late.
+
+Both `late_by_minutes` (the raw figure, so a manager can still see a 12-minute
+arrival) and `is_late` (the judgement) are **stored on the row**, not derived at
+read time — because the grace figure can be edited later, and payroll must not
+silently re-decide a month that was already approved.
+
+---
+
+## How pay is worked out
 
 ```
-browser                        Next.js server                 storage
-────────                       ──────────────                 ───────
-getUserMedia  ──▶ <video>
-   │  draw frame to <canvas>
-   ▼
-POST /api/photos  ──────────▶  auth() verifies Clerk session
-  (multipart, cookie)          validate size + magic bytes
-                               upload to <userId>/<uuid>.jpg  ──▶ private bucket
-                               insert row in `photos` table   ──▶ Supabase Postgres
-
-GET /dashboard  ────────────▶  list rows for this user only
-                               mint short-lived signed URLs   ◀── storage
+per day     = monthly_salary ÷ working_days_per_month
+gross       = per day × min(days present, working days)
+deductions  = days late × late_deduction
+net         = max(0, gross − deductions)
 ```
 
-The browser never sees a storage credential. It only ever talks to
-`/api/photos`, which is protected by Clerk.
+Days present counts **distinct days with a check-in**. Lateness is decided by
+the **first** check-in of each day, so somebody who arrives on time, steps out at
+noon and punches back in late has not turned up late.
+
+Gross is capped at a full month: covering 28 days against a 26-day basis is an
+overtime conversation, not something to pay out silently.
+
+To make a late day a **half day**, set the deduction to half of one day's pay.
+
+The arithmetic lives in one pure function,
+[`src/lib/payroll/calculate.ts`](src/lib/payroll/calculate.ts), used by both the
+console and the worker's own page — so the number a worker checks is the number
+their manager sees.
+
+### Approval
+
+A manager **prepares** a run, which freezes that month's figures into
+`payroll_runs`. An owner **approves**, **declines**, or marks it **paid**.
+
+Figures are frozen rather than recomputed on read: a salary change in March must
+not quietly rewrite a February payslip somebody already approved. If attendance
+or salary moves after a run was prepared, the console shows both numbers and
+says so.
+
+---
 
 ## Setup
 
@@ -35,16 +144,33 @@ cp .env.local.example .env.local
 Fill in `.env.local`:
 
 - **Clerk** — [dashboard.clerk.com](https://dashboard.clerk.com) → API Keys.
-  Copy the publishable key and secret key.
+  Copy the publishable key and the secret key.
 - **Supabase** — [supabase.com/dashboard](https://supabase.com/dashboard) →
   Project Settings → API Keys. Copy the project URL and the **secret** key
   (`sb_secret_…`). The publishable key will not work — it is a browser key, and
-  the RLS policies in the schema deliberately grant it nothing.
+  the RLS policies deliberately grant it nothing.
+- **Gemini** — [aistudio.google.com](https://aistudio.google.com) → API key.
+- **`ADMIN_EMAILS`** — the address that should own the deployment.
 
-**2. Create the table and bucket**
+**2. Run the migrations, in order**
 
-Paste [`supabase/schema.sql`](supabase/schema.sql) into the Supabase SQL editor
-and run it. It creates the `photos` table and the private `photos` bucket.
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_... npm run db:migrate -- \
+  supabase/schema.sql \
+  supabase/attendance.sql \
+  supabase/admin.sql \
+  supabase/dress-checks.sql \
+  supabase/scoring.sql \
+  supabase/grading.sql \
+  supabase/rbac.sql
+```
+
+`SUPABASE_ACCESS_TOKEN` is a *personal access token* from
+[account/tokens](https://supabase.com/dashboard/account/tokens) — a different
+secret from anything else in `.env.local`, and one the deployed app never reads.
+Or paste each file into the Supabase SQL editor by hand.
+
+Every migration is additive and idempotent, so re-running one is safe.
 
 **3. Run it**
 
@@ -55,12 +181,132 @@ npm run dev
 Open http://localhost:3000. Browsers only grant camera access on `localhost` or
 HTTPS, so a plain `http://` LAN address will not work.
 
-## Using Cloudinary instead
+**4. First run**
 
-The image bytes can go to Cloudinary rather than Supabase Storage. The Supabase
-`photos` table is still used as the metadata index either way.
+1. Sign in with the address in `ADMIN_EMAILS`. You land in the console as owner.
+2. **Carts** → add a cart. Stand at it and press *use my location*, or type the
+   coordinates. Set the radius.
+3. **Uniforms** (optional) → describe the uniform, set the weights and pass
+   mark, and upload a reference photo per garment. The logo cannot be judged
+   without one — a written description cannot tell one logo from another.
+4. **Staff** → enrol people by email, assign the cart, set shift, grace, salary.
+5. They sign in with that address and go straight to `/punch`.
 
-Set in `.env.local`:
+---
+
+## Routes
+
+| Route | Who | What |
+| --- | --- | --- |
+| `/punch` | anyone signed in | The selfie screen. Also explains enrolment to anyone not on the roster. |
+| `/me` | staff+ | Own attendance, own pay, own payslips. |
+| `/manage` | manager+ | Today at a glance: who is missing, who was late, what is waiting. |
+| `/manage/attendance` | manager+ | The day sheet — one row per person, present or not. |
+| `/manage/review` | manager+ | Photos the check could not settle. |
+| `/manage/staff` | manager+ | Roster, shifts, grace, salary, roles. |
+| `/manage/carts` | manager+ | Pin and radius. |
+| `/manage/uniforms` | owner | What the check looks for. |
+| `/manage/payroll` | manager+ | Prepare; owner approves. |
+
+---
+
+## Layout
+
+```
+src/
+  app/
+    punch/            The worker's screen
+    me/               A worker's own record
+    manage/           The console — layout guards once, each page re-checks
+      actions.ts      Every console write, each gated by requirePermission
+      nav.ts          Sections as data, with the permission each one needs
+    api/
+      attendance/     GET status, POST a punch
+      cron/           Catch-up worker for unsettled verdicts
+  lib/
+    auth/
+      rbac.ts         Roles → permissions. Pure, shared with the browser.
+      viewer.ts       Session → staff record (email match, Clerk id binding)
+    attendance/
+      service.ts      recordPunch — the order-of-operations above
+      uniform-check.ts  The blocking check, with a deadline
+      dress-checks.ts   The catch-up worker
+      geofence.ts     Haversine + accuracy floor. Shared client/server.
+    manage/           Console data layer, one file per subject
+      scope.ts        Narrows a manager to their own cart
+      form.ts         Form parsing and validation, shared by every action
+    uniform/
+      items.ts        What a uniform is, and how grades become a score. Pure.
+      profile.ts      Loading a uniform with its reference photos
+    payroll/
+      calculate.ts    The pay arithmetic. Pure, shared with the browser.
+  components/
+    ui/               Card, Pill, Field, SubmitButton — the shared kit
+    punch/            The selfie screen
+    manage/           One manager per console subject
+```
+
+The split that matters: anything **pure** (`rbac.ts`, `items.ts`,
+`calculate.ts`, `geofence.ts`) is importable by the browser, so the punch screen
+can explain a verdict and the worker's page can show the same pay maths the
+console does. Anything touching the database imports `server-only`, so the build
+fails if it is ever pulled into a client bundle.
+
+---
+
+## Scaling
+
+Two reads would otherwise grow with the size of the whole company rather than
+with what is being looked at, so both are grouped in Postgres
+(see section 11 of [`supabase/rbac.sql`](supabase/rbac.sql)):
+
+- `monthly_attendance(staff_ids, from, to)` — days present and days late per
+  person, using `DISTINCT ON` to take each day's first check-in.
+- `cart_staff_counts()` — headcount per cart.
+
+Everything else is bounded by scope: a manager's queries never reach past their
+own cart, and an owner's reach at most one cart's staff per day sheet.
+
+**Known limit:** the rate limiter in
+[`src/lib/rate-limit.ts`](src/lib/rate-limit.ts) is in-memory, so it only covers
+a single instance. A multi-instance deployment should back it with
+Redis/Upstash.
+
+---
+
+## Security notes
+
+- `SUPABASE_SECRET_KEY`, the Cloudinary secret and `GEMINI_API_KEY` never reach
+  the browser. `src/lib/supabase/admin.ts` and the storage providers import
+  `server-only`, so the build fails if they are pulled into a client bundle.
+- **Every Server Action re-checks the session and the permission.** Actions are
+  reachable by direct POST, not only through the forms that render them, so
+  gating the page that shows the form is not enough. Hiding a nav link is a
+  courtesy, never a control.
+- **Roles only follow a *verified* email.** An unverified address could be typed
+  by anyone, and matching a role against one would let a stranger claim a
+  manager's account by claiming their address.
+- A staff row's Clerk id is bound on first sign-in and **only ever fills a
+  blank** — never re-pointed, which would hand a new account the old one's
+  history.
+- Storage paths are built from the Clerk user id **on the server**, so a client
+  cannot choose where its file lands.
+- Uploads are checked against the file's real magic bytes, not the browser's
+  claimed `Content-Type`, and capped at 4 MB (`MAX_UPLOAD_BYTES`).
+- RLS is enabled on every table with no permissive policies, so a leaked anon
+  key grants nothing.
+- Coordinates are **self-reported by the browser** and cannot be independently
+  verified. Treat a stored position as "what the device claimed", not as proof
+  of presence. The geofence result is *recorded* as well as enforced, so a later
+  audit can see how close the call was.
+
+---
+
+## Storage: Supabase or Cloudinary
+
+The image bytes can go to either. The Supabase `photos` table is the metadata
+index regardless, and each row records the backend that holds it — so switching
+providers is safe for photos that already exist.
 
 ```env
 STORAGE_PROVIDER=cloudinary
@@ -69,231 +315,21 @@ CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 ```
 
-Assets upload with `type: "authenticated"` and a per-user folder
-(`live-photos/<clerk_user_id>/…`), so the plain delivery URL returns 404 and
-every read needs a signature generated server-side with the API secret.
-
-Switching providers is safe for existing photos: each row records the backend
-that holds it, so old and new photos both keep resolving in the gallery.
+Cloudinary assets upload with `type: "authenticated"` under a per-user folder,
+so the plain delivery URL returns 404 and every read needs a signature generated
+server-side. Supabase signed URLs here last 5 minutes.
 
 > Cloudinary's *expiring* signed URLs (`auth_token`) are a paid add-on. Without
-> it, signatures do not expire — they are unguessable, but they don't time out
-> the way Supabase's do. Supabase signed URLs here last 5 minutes.
+> it, signatures are unguessable but do not time out the way Supabase's do.
 
-## Attendance and dress code
-
-Staff at a food cart punch in and out from `/attendance`. Every punch records a
-photo, the distance from the cart, and how late it was against the shift.
-
-```
-browser                          Next.js server
-────────                         ──────────────
-watch position  ──▶ distance to cart shown live
-   │  (button stays disabled until inside the fence)
-   ▼
-capture frame, scaled to 1024px
-   │
-   ▼
-POST /api/attendance  ─────────▶ auth() verifies Clerk session
-  (multipart, cookie)            resolve staff row from the Clerk user id
-                                 reject if already checked in  ─┐
-                                 reject if outside the geofence ─┤ no upload,
-                                                                 ┘ no storage write
-                                 store evidence photo
-                                 insert attendance_events
-                                   └─ trigger fills business_date +
-                                      late_by_minutes in the cart's timezone
-```
-
-**Setup.** Run [`supabase/attendance.sql`](supabase/attendance.sql) and
-[`supabase/admin.sql`](supabase/admin.sql) after `schema.sql`. Both are additive
-and idempotent, so they are safe against a database that already holds photos.
-Paste them into the Supabase SQL editor, or apply them from here:
-
-```bash
-npm run db:migrate supabase/attendance.sql supabase/admin.sql
-```
-
-The `db:migrate` route needs `SUPABASE_ACCESS_TOKEN` in `.env.local` — a
-personal access token from
-[supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens),
-which is a different secret from `SUPABASE_SECRET_KEY`. PostgREST cannot execute
-DDL and the secret key is not a Postgres credential, so
-[`scripts/db-migrate.mjs`](scripts/db-migrate.mjs) goes through the Management
-API instead. That token reaches every project on the account, so keep it local —
-it is never needed by the deployed app, and nothing else reads it.
-
-Then open `/admin`. While the `staff` table is empty the page offers to make the
-signed-in account the first admin — managing staff needs a role and granting a
-role needs the panel, so the first one has to bootstrap. That offer disappears
-the moment any staff row exists.
-
-From there, carts and staff are managed in the UI; no SQL is needed again. Add
-each cart **while standing at it** and press "Use my current location" rather
-than typing coordinates. To enrol someone, they sign in, open `/attendance`, and
-send you the Clerk user id the page prints.
-
-No new environment variables are needed to *run* the app: attendance uses the
-storage and Supabase config that is already there.
-
-**Tolerance is per cart.** `carts.radius_m` is how far from that cart's pin a
-punch still counts — 100–150m absorbs ordinary phone GPS slop. It is set per
-cart rather than globally because a cart on an open street and one inside a
-market do not need the same allowance. With several carts, keep each radius well
-under the distance to the nearest other cart, or someone standing at one could
-punch for the other; staff are matched to their *assigned* cart, so the failure
-shows up as a punch accepted at the wrong place rather than a rejection.
-
-**Geofencing is a deterrent, not proof.** Coordinates come from the browser and
-a determined user can override them, exactly as the `photos` table already
-notes. Two things narrow the gap: a fix coarser than `MAX_ACCURACY_M` (100m) is
-refused outright, so a desktop reporting ±2km cannot "land inside" a 150m
-circle by luck, and `distance_m` is stored on every punch so an audit can see
-how close each one really was.
-
-**Times are per cart.** `carts.timezone` drives both the business date a punch
-belongs to and the lateness calculation, so carts in different zones each
-report their own local day. That math lives in the `attendance_derived`
-trigger rather than in JS, because Postgres does it correctly.
-
-## Dress-code checking
-
-A check-in queues a uniform verdict. **Attendance never waits for it** — the
-punch is recorded and returned, and the verdict is attached a second or two
-later by a background worker.
-
-```
-POST /api/attendance (kind=in)
-   │  record punch ─────────────▶ 201 to the staff member
-   │  queue dress_checks row
-   ▼
-after()  ──▶ runDressCheckBatch()   ← fast path, ~2s
-punch screen poll ──▶ same          ← retries while someone is watching
-nightly cron ──▶ same               ← long-stop sweeper
-   │
-   │  claim_dress_checks()  ← FOR UPDATE SKIP LOCKED, so these never
-   │                          pay for the same verdict twice
-   ▼
-Gemini (one call per batch of 8) ──▶ verdict written to dress_checks
-```
-
-The staff screen polls while a verdict is pending and stops once it settles.
-
-**Setup.** Run [`supabase/dress-checks.sql`](supabase/dress-checks.sql),
-[`supabase/scoring.sql`](supabase/scoring.sql) and
-[`supabase/grading.sql`](supabase/grading.sql), then set `GEMINI_API_KEY` and
-`CRON_SECRET` (see `.env.local.example`). On Vercel, add both under
-Settings → Environment Variables — the build succeeds without them and the
-worker then fails at runtime, which is a confusing way to find out.
-
-Vercel presents `CRON_SECRET` to the cron route as a bearer token, which the
-route checks. Without that the worker — and the spend behind it — would be
-triggerable by anyone who found the path.
-
-**The schedule is daily, and that is a plan limit, not a preference.** Hobby
-accounts reject any cron more frequent than once a day, and the *deployment
-fails* rather than the schedule degrading. So the nightly run is a long-stop
-sweeper, and two things carry the real load: `after()` on the punch, and the
-punch screen, which re-renders every couple of seconds while a verdict is
-outstanding and kicks the worker again each time (`kickWorkerIfPending`). A
-check that fails its first attempt is retried within seconds while the staff
-member is still looking at the screen, rather than waiting for morning. On Pro,
-`*/5 * * * *` in [`vercel.json`](vercel.json) is a better fit.
-
-Uniforms are described in words, per cart, at `/admin`. That description is
-injected into the prompt verbatim, so how it is worded matters more than any
-other setting here.
-
-### Reference photos and the logo
-
-Words describe a navy polo well enough. They cannot describe *your* logo, so
-`/admin` takes one photo per item — cap, apron, shirt, logo — and those are sent
-ahead of the staff photos on every call. The logo one is the point: it is the
-only way the check can tell your print from any other.
-
-They are stored under a `uniforms/<profile>` prefix rather than in the
-uploader's folder, since they belong to the business, and they are shrunk in the
-browser before upload because a phone photo would otherwise exceed the request
-limit.
-
-### Resolution is the accuracy dial, not the image size
-
-Gemini 3.x prices an image by the **media resolution** asked for, not by how
-many pixels were sent. Measured on this project's own captures:
-
-| `GEMINI_MEDIA_RESOLUTION` | Tokens per image | Cost/month, 200 staff |
-| --- | --- | --- |
-| `MEDIA_RESOLUTION_LOW` | ~266 | — |
-| `MEDIA_RESOLUTION_MEDIUM` | ~540 | ₹179 |
-| `MEDIA_RESOLUTION_HIGH` *(default)* | ~1064 | ₹251 |
-| `MEDIA_RESOLUTION_ULTRA_HIGH` | ~2160 | ₹402 |
-
-Two consequences worth holding on to:
-
-- **Shrinking the upload saves bandwidth and not one token.** Captures are
-  1024px (`CAPTURE_MAX_EDGE`) so the detail the check needs is actually present;
-  a single photo then serves both the manager's review and the model.
-- **If a logo is being missed, raise the resolution, not the image size.** That
-  is the only dial that changes either the answer or the bill.
-
-### Why it still costs little
-
-- **`thinkingLevel: "minimal"`.** Thinking tokens bill at the *output* rate and
-  "is a cap present" needs no reasoning. This is also why the default model is
-  Flash-Lite: `gemini-3.8-flash` cannot go below `"low"`.
-- **Batches of 8.** One call, one shared instruction block, one set of reference
-  photos, and eight times the headroom against the requests-per-minute ceiling.
-- **Check-outs are never checked.** Re-verifying a uniform at the end of a shift
-  costs a call and tells you nothing new. Halves the volume outright.
-- **Tiny output.** Single-character enums, and a written reason only on a fail.
-
-A daily cap (`GEMINI_DAILY_CALL_CAP`) backstops all of it: past the ceiling,
-checks stay queued rather than being dropped, so a runaway loop costs nothing
-and the work resumes the next day.
-
-### The score
-
-The check grades **how each item is worn**, not merely whether it is there:
-
-| Grade | Meaning | Credit |
-| --- | --- | --- |
-| `g` | worn properly | full weight |
-| `p` | present but worn badly — cap pushed back, apron untied, shirt crumpled | half |
-| `n` | not worn | none |
-| `?` | the photo cannot settle it | bracketed, see below |
-
-Five items are graded — cap, apron, shirt, logo, and overall turnout — each
-carrying a weight set per uniform in `/admin`. The score is the weighted share
-earned, out of 100, and a uniform passes at or above its pass mark.
-
-Four grades, not a number, is deliberate. A model asked to rate an item 0-100
-returns something that looks precise and moves between runs on the same photo;
-asked whether something is worn properly, badly, or not at all, it is steady.
-More buckets would add noise rather than detail. The arithmetic then happens in
-`scoreObservation`, so the score is stable, explainable ("apron worn badly,
-half of 20"), and adjustable without touching the prompt.
-
-**Three scores, not one.** `score_worst` treats every `?` as not worn,
-`score_best` as worn properly, and the verdict only commits to pass or fail
-when both land on the same side of the pass mark. Anything else is `unclear`
-and goes to a person, which is what stops a dark photo from producing a
-confident accusation. The displayed score is the midpoint.
-
-Watch the interaction between weights and the pass mark: with the defaults
-(cap 20, apron 20, shirt 25, logo 15, turnout 20) and a mark of 70, someone
-missing only their cap scores 80 and still passes. Raise the mark if every item
-must be present and properly worn.
+---
 
 ## Deploying to Vercel
 
 Import the repo at [vercel.com/new](https://vercel.com/new). Next.js is detected
-automatically — the default build command, output directory, and install command
-are all correct, so nothing needs overriding.
+automatically, so nothing needs overriding.
 
 **1. Environment variables**
-
-Add these under Settings → Environment Variables, for every environment you
-want to work (Production, Preview, Development):
 
 | Variable | Notes |
 | --- | --- |
@@ -301,109 +337,43 @@ want to work (Production, Preview, Development):
 | `CLERK_SECRET_KEY` | Server only. `sk_live_…` for Production. |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | `/sign-in` |
 | `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | `/sign-up` |
-| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/dashboard` |
-| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/dashboard` |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/punch` |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/punch` |
 | `NEXT_PUBLIC_SUPABASE_URL` | |
 | `SUPABASE_SECRET_KEY` | Server only. `sb_secret_…`, never the publishable key. |
 | `SUPABASE_PHOTOS_BUCKET` | `photos` |
 | `STORAGE_PROVIDER` | `supabase` or `cloudinary` |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` / `_FOLDER` | Only when `STORAGE_PROVIDER=cloudinary` |
-| `GEMINI_API_KEY` | Server only. Without it the dress-check worker fails at runtime. |
+| `ADMIN_EMAILS` | Comma-separated owner allow-list |
+| `GEMINI_API_KEY` | Server only |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` |
-| `GEMINI_MEDIA_RESOLUTION` | `MEDIA_RESOLUTION_HIGH`. Raise for small details, at roughly double the cost per step. |
+| `GEMINI_MEDIA_RESOLUTION` | `MEDIA_RESOLUTION_HIGH` |
 | `GEMINI_DAILY_CALL_CAP` | Ceiling on model calls per day |
+| `UNIFORM_CHECK_TIMEOUT_MS` | How long a check-in waits for a verdict. Default 9000. |
 | `CRON_SECRET` | Vercel presents this to the cron route as a bearer token |
 
 `SUPABASE_ACCESS_TOKEN` is **not** in this list on purpose: it is a local
-migration credential that reaches every project on the account, and the
-deployed app never reads it.
+migration credential that reaches every project on the account, and the deployed
+app never reads it.
 
-The `NEXT_PUBLIC_*` values are compiled into the client bundle, so they must be
-present *before* the build and a change to one needs a fresh deploy. The rest
-are read per request and only ever on the server.
+`NEXT_PUBLIC_*` values are compiled into the client bundle, so they must be
+present *before* the build and a change to one needs a fresh deploy.
 
-**2. Point Clerk at the deployed domain**
+**2. Point Clerk at the deployed domain**, add the Vercel URL to Clerk's allowed
+origins, and run the migrations against the production Supabase project.
 
-The `pk_test_`/`sk_test_` keys work on `*.vercel.app` previews but not on a real
-production domain. In the Clerk dashboard, create a **production instance**, add
-the domain, and add the DNS records Clerk asks for. Then use that instance's
-`pk_live_`/`sk_live_` keys for the Production environment only — keep the test
-keys on Preview and Development so preview deploys keep working.
-
-**3. Run the schema against the production project**
-
-Paste [`supabase/schema.sql`](supabase/schema.sql) into the SQL editor of
-whichever Supabase project the deployment points at. A separate project for
-production keeps real photos out of your development data.
-
-**4. Check the camera works**
-
-Vercel serves every deployment over HTTPS, which is what `getUserMedia`
-requires, so the camera and the on-device face model both work on preview URLs
-as well as production.
+**3. Cron.** [`vercel.json`](vercel.json) schedules the catch-up worker. Hobby
+plans cap cron at once a day, which is why it is a long-stop rather than a retry
+loop — the punch screen's own poll is what retries a check within seconds.
 
 ### Platform limits worth knowing
 
-- **Request bodies are capped at 4.5 MB.** Vercel rejects anything larger at the
-  edge, before the function runs. `MAX_UPLOAD_BYTES` in
-  [src/lib/photos.ts](src/lib/photos.ts) is set to 4 MB so an oversized capture
-  fails with this app's message rather than an opaque platform error. Going
-  past 4.5 MB means uploading straight to storage from the browser with a
-  pre-signed URL instead of proxying bytes through the route handler.
-- **The upload route asks for `maxDuration = 30`**, up from the 10s default, so
-  a slow connection plus the storage round-trip doesn't get cut off.
-- **The rate limiter is in-memory** ([src/lib/rate-limit.ts](src/lib/rate-limit.ts)),
-  so each serverless instance counts separately and the effective limit is
-  higher than the configured 20/minute. Back it with Upstash Redis if you need
-  a real ceiling.
-- **Put the deployment in a region near the Supabase project** (Settings →
-  Functions). Every upload and gallery render is a round-trip to it, so a
-  mismatched region shows up directly as latency.
+- Vercel rejects request bodies over 4.5 MB at the edge, before the function
+  runs. Captures are resized to a 1024 px long edge (~150 KB), well under it.
+- `/api/attendance` sets `maxDuration = 45`: a check-in now waits on a model
+  call as well as an upload.
 
-## Security notes
-
-- `SUPABASE_SECRET_KEY` and the Cloudinary secret are never exposed to the
-  browser. `src/lib/supabase/admin.ts` and the storage providers import
-  `server-only`, so the build fails if they are ever pulled into a client bundle.
-- Storage paths are built from the Clerk user id **on the server**. A client
-  cannot choose where its file lands, so cross-user writes are impossible.
-- Every route handler calls `auth()` and scopes its query by `userId`. Passing
-  another user's photo id to `DELETE /api/photos/:id` reads as "not found".
-- Uploads are checked against the file's real magic bytes, not the browser's
-  claimed `Content-Type`, and capped at 4 MB (see `MAX_UPLOAD_BYTES`).
-- RLS is enabled on `photos` with no permissive policies, so a leaked anon key
-  grants nothing.
-- The rate limiter in `src/lib/rate-limit.ts` is in-memory, which only covers a
-  single instance. For a multi-instance deployment, back it with Redis/Upstash.
-
-## Layout
-
-| Path | What it does |
-| --- | --- |
-| [src/proxy.ts](src/proxy.ts) | Clerk auth gate. Next.js 16 renamed `middleware.ts` to `proxy.ts`. |
-| [src/app/camera/page.tsx](src/app/camera/page.tsx) | Capture screen |
-| [src/components/CameraCapture.tsx](src/components/CameraCapture.tsx) | Camera stream, capture, preview, upload |
-| [src/app/dashboard/page.tsx](src/app/dashboard/page.tsx) | Gallery, server-rendered with fresh signed URLs |
-| [src/app/api/photos/route.ts](src/app/api/photos/route.ts) | `GET` list, `POST` upload |
-| [src/lib/photos.ts](src/lib/photos.ts) | Validation and metadata; the core logic |
-| [src/lib/storage/](src/lib/storage/) | Swappable Supabase / Cloudinary backends |
-| [src/app/attendance/page.tsx](src/app/attendance/page.tsx) | Punch screen |
-| [src/components/AttendancePunch.tsx](src/components/AttendancePunch.tsx) | Live geofence readout, capture, punch |
-| [src/app/api/attendance/route.ts](src/app/api/attendance/route.ts) | `GET` today's status, `POST` a punch |
-| [src/lib/attendance/service.ts](src/lib/attendance/service.ts) | Staff lookup, session rules, punch recording |
-| [src/lib/attendance/geofence.ts](src/lib/attendance/geofence.ts) | Haversine distance, shared by both sides |
-| [src/lib/image.ts](src/lib/image.ts) | Capture sizing and browser-side shrinking |
-| [src/app/admin/page.tsx](src/app/admin/page.tsx) | Cart and staff management, role-gated |
-| [src/app/admin/actions.ts](src/app/admin/actions.ts) | Server Actions; each re-checks the role itself |
-| [src/components/admin/](src/components/admin/) | Cart editor with "use my location", staff editor |
-| [src/lib/attendance/admin.ts](src/lib/attendance/admin.ts) | Admin queries and the first-admin bootstrap |
-| [supabase/attendance.sql](supabase/attendance.sql) | Carts, staff, punches, dress-check queue |
-| [src/lib/gemini/dresscode.ts](src/lib/gemini/dresscode.ts) | The batched model call, schema, and verdict policy |
-| [src/lib/attendance/dress-checks.ts](src/lib/attendance/dress-checks.ts) | Queue: enqueue, claim, judge, record spend |
-| [src/app/api/cron/dress-checks/route.ts](src/app/api/cron/dress-checks/route.ts) | Durable worker, bearer-token gated |
-| [supabase/dress-checks.sql](supabase/dress-checks.sql) | Atomic claim RPC and queue columns |
-| [supabase/scoring.sql](supabase/scoring.sql) | Weights, pass mark, reference-image table |
-| [scripts/db-migrate.mjs](scripts/db-migrate.mjs) | Applies .sql files via the Management API |
+---
 
 ## Notes on versions
 

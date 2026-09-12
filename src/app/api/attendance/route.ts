@@ -1,42 +1,47 @@
-import { auth } from "@clerk/nextjs/server";
 import { after, NextResponse } from "next/server";
 
+import { getViewerState } from "@/lib/auth/viewer";
+import { can } from "@/lib/auth/rbac";
 import { parseLocation } from "@/lib/geo";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { StorageError } from "@/lib/storage";
 import {
-  findStaff,
+  findWorker,
   getAttendanceStatus,
   recordPunch,
+  UniformRejected,
 } from "@/lib/attendance/service";
 import { parsePunchKind } from "@/lib/attendance/types";
-import {
-  kickWorkerIfPending,
-  runDressCheckBatch,
-} from "@/lib/attendance/dress-checks";
+import { kickWorkerIfPending, runDressCheckBatch } from "@/lib/attendance/dress-checks";
 
 export const runtime = "nodejs";
-// Same reasoning as the photos route: the evidence upload plus the storage
-// round-trip can outlast the 10s default on a cart's mobile connection.
-export const maxDuration = 30;
+/**
+ * A check-in now waits on a model call as well as an upload.
+ *
+ * The uniform check has its own, much shorter deadline -- see
+ * `serverEnv.uniformCheckTimeoutMs` -- so this ceiling is the outer bound for
+ * upload plus check plus two writes on a cart's mobile connection.
+ */
+export const maxDuration = 45;
 
 /** Today's punches and whether the caller is mid-shift. */
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) {
+  const state = await getViewerState();
+  if (state.status === "signed-out") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (state.status === "not-enrolled") {
+    // Not an error: a signed-in person nobody has enrolled yet. The address is
+    // echoed back so it can be handed to a manager verbatim.
+    return NextResponse.json({ enrolled: false, email: state.email });
   }
 
   try {
-    const staff = await findStaff(userId);
-    if (!staff) {
-      // Not an error: a signed-in user who has not been enrolled yet. The id is
-      // echoed back so it can be pasted straight into the staff table.
-      return NextResponse.json({ enrolled: false, clerkUserId: userId });
-    }
+    const worker = await findWorker(state.viewer.staffId);
+    if (!worker) return NextResponse.json({ enrolled: false, email: state.viewer.email });
 
-    const status = await getAttendanceStatus(staff);
-    kickWorkerIfPending(userId, status.events);
+    const status = await getAttendanceStatus(worker);
+    kickWorkerIfPending(state.viewer.staffId, status.events);
 
     return NextResponse.json({ enrolled: true, status });
   } catch (error) {
@@ -45,17 +50,30 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const state = await getViewerState();
+  if (state.status !== "enrolled") {
+    return NextResponse.json(
+      { error: state.status === "signed-out" ? "Sign in first." : "You are not enrolled yet." },
+      { status: state.status === "signed-out" ? 401 : 403 },
+    );
   }
 
-  // A punch is twice-a-day behaviour; anything near this ceiling is a stuck
-  // retry loop or someone probing the geofence.
-  const limit = checkRateLimit(`punch:${userId}`, 10, 60_000);
+  const { viewer } = state;
+  if (!can(viewer.role, "attendance:punch")) {
+    return NextResponse.json({ error: "You cannot record attendance." }, { status: 403 });
+  }
+
+  /*
+   * Deliberately generous compared with the old limit.
+   *
+   * A refused uniform check is *meant* to be retried, so somebody fixing their
+   * cap and trying again three times in a minute is the system working. This
+   * ceiling is only here to stop a stuck client from looping on the model call.
+   */
+  const limit = checkRateLimit(`punch:${viewer.staffId}`, 15, 5 * 60_000);
   if (!limit.ok) {
     return NextResponse.json(
-      { error: "Too many attempts. Give it a moment." },
+      { error: "Too many attempts. Give it a moment and try again." },
       { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
     );
   }
@@ -78,17 +96,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const staff = await findStaff(userId);
-    if (!staff) {
+    const worker = await findWorker(viewer.staffId);
+    if (!worker) {
       return NextResponse.json(
-        { error: "You are not enrolled as staff. Ask an admin to add you." },
+        { error: "You are not assigned to a cart. Ask your manager." },
         { status: 403 },
       );
     }
 
     const event = await recordPunch({
-      clerkUserId: userId,
-      staff,
+      clerkUserId: viewer.clerkUserId,
+      worker,
       kind,
       file,
       location: parseLocation(form),
@@ -99,17 +117,18 @@ export async function POST(request: Request) {
       height: numberOrNull(form.get("height")),
     });
 
-    // Fast path for the verdict: runs once this response is on its way, so the
-    // staff member is never waiting on a model call. `after` is bounded by
-    // maxDuration and is not retried, so two things back it up — the punch
-    // screen's poll, which kicks the worker again while a verdict is still
-    // outstanding, and the nightly cron for anything left after that.
-    if (event.kind === "in") {
+    /*
+     * Only reached when the inline check could not settle the photo, which
+     * leaves a 'queued' row behind. Running the batch worker after the response
+     * usually turns that into a verdict within a second or two, so a manager is
+     * never asked to review something the model could have answered.
+     */
+    if (event.dressCheck?.status === "queued") {
       after(async () => {
         try {
           await runDressCheckBatch();
         } catch (workerError) {
-          console.error("[api/attendance] dress check kick failed", workerError);
+          console.error("[api/attendance] catch-up worker failed", workerError);
         }
       });
     }
@@ -126,9 +145,27 @@ function numberOrNull(value: FormDataEntryValue | null): number | null {
 }
 
 function errorResponse(error: unknown) {
+  /*
+   * A refused uniform is not a generic 422.
+   *
+   * The punch screen has to tell the worker which item to fix, so the grades
+   * travel alongside the message rather than being flattened into prose the
+   * client would have to parse back out.
+   */
+  if (error instanceof UniformRejected) {
+    return NextResponse.json(
+      {
+        error: error.message,
+        uniform: { grades: error.grades, score: error.score },
+      },
+      { status: 422 },
+    );
+  }
+
   if (error instanceof StorageError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
+
   console.error("[api/attendance]", error);
   return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
 }

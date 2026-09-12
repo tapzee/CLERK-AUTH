@@ -76,31 +76,20 @@ export function sniffImageType(bytes: Uint8Array): AllowedType | null {
   return null;
 }
 
-type StorePhotoInput = {
-  userId: string;
-  file: File;
-  width?: number | null;
-  height?: number | null;
-  capturedAt?: string | null;
-  location?: LocationInput | null;
-  captureMethod?: CaptureMethod;
-  purpose?: PhotoPurpose;
+/** An upload that has been read into memory and proven to be a real image. */
+export type VerifiedImage = {
+  bytes: Uint8Array;
+  contentType: AllowedType;
 };
 
 /**
- * Validates the incoming capture, writes it to the active storage provider
- * under a per-user path, then records a row pointing at it.
+ * Reads an upload into memory and checks it is what it claims to be.
+ *
+ * Split out from `storePhoto` because the punch route needs the same bytes
+ * twice -- once to ask the model about the uniform, once to store the evidence
+ * -- and reading a multipart body a second time is not possible.
  */
-export async function storePhoto({
-  userId,
-  file,
-  width,
-  height,
-  capturedAt,
-  location,
-  captureMethod = "manual",
-  purpose = "personal",
-}: StorePhotoInput): Promise<PhotoRow> {
+export async function verifyImageUpload(file: File): Promise<VerifiedImage> {
   if (file.size === 0) {
     throw new StorageError("The uploaded photo is empty.", 400);
   }
@@ -120,6 +109,42 @@ export async function storePhoto({
     throw new StorageError("The file contents do not match its declared type.", 415);
   }
 
+  return { bytes, contentType };
+}
+
+type PhotoMetadata = {
+  userId: string;
+  width?: number | null;
+  height?: number | null;
+  capturedAt?: string | null;
+  location?: LocationInput | null;
+  captureMethod?: CaptureMethod;
+  purpose?: PhotoPurpose;
+};
+
+type StorePhotoInput = PhotoMetadata & { file: File };
+
+/**
+ * Validates the incoming capture, writes it to the active storage provider
+ * under a per-user path, then records a row pointing at it.
+ */
+export async function storePhoto({ file, ...metadata }: StorePhotoInput): Promise<PhotoRow> {
+  return storeVerifiedPhoto(await verifyImageUpload(file), metadata);
+}
+
+/** The half of `storePhoto` that runs once the bytes are already in hand. */
+export async function storeVerifiedPhoto(
+  { bytes, contentType }: VerifiedImage,
+  {
+    userId,
+    width,
+    height,
+    capturedAt,
+    location,
+    captureMethod = "manual",
+    purpose = "personal",
+  }: PhotoMetadata,
+): Promise<PhotoRow> {
   const provider = activeProvider();
   const { path } = await provider.upload({
     userId,
