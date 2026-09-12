@@ -24,10 +24,13 @@ import { shrinkImageFile } from "@/lib/image";
  * lives behind `server-only`.
  */
 const ITEMS = [
-  { key: "cap", label: "Cap or hairnet" },
-  { key: "apron", label: "Apron" },
-  { key: "shirt", label: "Uniform shirt" },
-  { key: "logo", label: "Company logo" },
+  { key: "cap", label: "Cap or hairnet", reference: true },
+  { key: "apron", label: "Apron", reference: true },
+  { key: "shirt", label: "Uniform shirt", reference: true },
+  { key: "logo", label: "Company logo", reference: true },
+  // Scored like the rest, but there is no garment to photograph — it is how
+  // tidily the whole uniform is being worn.
+  { key: "neat", label: "Overall turnout", reference: false },
 ] as const;
 
 type Editing = { uniform: AdminUniform | null } | null;
@@ -186,6 +189,12 @@ function UniformForm({
             not have to add to 100 — only the ratio between them matters. Set an
             item to 0 to have it reported but not scored.
           </p>
+          <p className="mt-1.5 text-xs text-muted text-pretty">
+            Every item is graded on <em>how</em> it is worn, not just whether it
+            is there: worn properly earns its full weight, worn badly — cap
+            pushed back, apron untied, shirt crumpled — earns half, and not worn
+            earns none.
+          </p>
         </fieldset>
 
         <Field label="Pass mark">
@@ -246,7 +255,7 @@ function UniformForm({
             only way the check can tell your logo from any other print.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {ITEMS.map((item) => (
+            {ITEMS.filter((item) => item.reference).map((item) => (
               <ReferenceSlot
                 key={item.key}
                 uniformId={uniform.id}
@@ -266,7 +275,13 @@ function UniformForm({
   );
 }
 
-const DEFAULTS: Record<string, number> = { cap: 25, apron: 25, shirt: 30, logo: 20 };
+const DEFAULTS: Record<string, number> = {
+  cap: 20,
+  apron: 20,
+  shirt: 25,
+  logo: 15,
+  neat: 20,
+};
 
 function ReferenceSlot({
   uniformId,
