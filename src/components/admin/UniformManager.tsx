@@ -11,11 +11,10 @@ import {
 
 import {
   deleteReferenceAction,
-  IDLE,
   saveUniformAction,
   uploadReferenceAction,
-  type ActionState,
 } from "@/app/admin/actions";
+import { IDLE, type ActionState } from "@/app/admin/action-state";
 import type { AdminUniform } from "@/lib/attendance/admin";
 import { shrinkImageFile } from "@/lib/image";
 
