@@ -246,14 +246,27 @@ function ReferenceSlot({
   );
   const [, remove] = useActionState<ActionState, FormData>(deleteReferenceAction, IDLE);
 
-  const url = reference?.url ?? null;
+  // A locally chosen file previews immediately, before the upload round-trip --
+  // revoked on unmount/replacement since object URLs otherwise leak.
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return file ? URL.createObjectURL(file) : null;
+    });
+  }
+
+  const url = preview ?? reference?.url ?? null;
   const isLogo = kind === "logo";
 
   return (
     <div className="space-y-2 rounded-xl border border-border/60 bg-surface/40 p-2.5">
       <div className="relative aspect-square overflow-hidden rounded-lg border border-border/80 bg-neutral-900">
         {url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed/object URL
           <img src={url} alt={ITEM_LABELS[kind]} className="h-full w-full object-cover" />
         ) : (
           <div className="grid h-full place-items-center p-2 text-center text-[10px] text-muted">
@@ -273,6 +286,7 @@ function ReferenceSlot({
           name="file"
           accept="image/jpeg,image/png,image/webp"
           required
+          onChange={onFileChange}
           className="w-full text-[10px] text-muted file:mr-1.5 file:rounded-md file:border-0 file:bg-surface-muted file:px-2 file:py-0.5 file:text-[10px] cursor-pointer"
         />
         <SubmitButton
