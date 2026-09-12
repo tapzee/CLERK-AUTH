@@ -189,6 +189,8 @@ export function RoleSignInView() {
         {/* Right: Clerk Sign-In Form */}
         <div className="flex justify-center w-full">
           <SignIn
+            fallbackRedirectUrl="/"
+            forceRedirectUrl="/"
             appearance={{
               elements: {
                 rootBox: "w-full",

@@ -15,12 +15,12 @@ export async function AppNav() {
   if (state.status === "signed-out") {
     return (
       <div className="flex items-center gap-2 text-sm">
-        <SignInButton mode="modal">
+        <SignInButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
           <button className="rounded-full px-4 py-1.5 font-medium text-muted transition hover:bg-surface-muted hover:text-foreground">
             Sign in
           </button>
         </SignInButton>
-        <SignUpButton mode="modal">
+        <SignUpButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
           <button className="btn btn-primary py-1.5 text-xs shadow-sm sm:text-sm">
             Sign up
           </button>

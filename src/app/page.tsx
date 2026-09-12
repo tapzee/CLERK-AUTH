@@ -55,7 +55,7 @@ export default async function Home() {
         </p>
 
         <div className="mt-9 flex flex-wrap justify-center gap-3.5">
-          <SignUpButton mode="modal">
+          <SignUpButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
             <button className="btn btn-primary px-7 py-3 text-base shadow-lg shadow-accent/20">
               <span>Get started</span>
               <ArrowRight className="h-4 w-4" />

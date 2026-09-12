@@ -13,7 +13,7 @@ export default async function SignUpPage() {
 
   return (
     <div className="flex justify-center py-10">
-      <SignUp />
+      <SignUp fallbackRedirectUrl="/" forceRedirectUrl="/" />
     </div>
   );
 }
