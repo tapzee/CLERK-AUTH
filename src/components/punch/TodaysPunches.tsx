@@ -6,7 +6,7 @@ import { Card, LocalTime, Pill } from "@/components/ui/primitives";
 export function TodaysPunches({ events }: { events: AttendanceEvent[] }) {
   return (
     <Card className="p-4">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border pb-3">
         <p className="label mb-0">Today&rsquo;s Timeline</p>
         <span className="text-[11px] font-mono text-muted">
           {events.length} {events.length === 1 ? "record" : "records"}
@@ -22,7 +22,7 @@ export function TodaysPunches({ events }: { events: AttendanceEvent[] }) {
             return (
               <li
                 key={event.id}
-                className="group relative rounded-xl border border-border/50 bg-surface/50 p-3 transition-all duration-150 hover:bg-surface-muted/60"
+                className="group relative rounded-xl border border-border bg-surface/50 p-3 transition-all duration-150 hover:bg-surface-muted/60"
               >
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ function VerdictLine({ check }: { check: UniformVerdict }) {
   return (
     <div className={`flex flex-wrap items-center gap-2 text-xs ${tone}`}>
       {check.score !== null && (
-        <span className="inline-flex items-center gap-1 rounded-md bg-current/10 px-2 py-0.5 font-bold font-mono text-[11px]">
+        <span className="inline-flex items-center gap-1 rounded-md bg-current/10 px-2 py-0.5 font-semibold font-mono text-[11px]">
           <ShieldCheck className="h-3 w-3" />
           {check.score}/100
         </span>

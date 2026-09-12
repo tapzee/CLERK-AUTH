@@ -11,14 +11,14 @@ export default function AttendanceLoading() {
       </div>
 
       <div className="card overflow-hidden p-0">
-        <div className="border-b border-border/80 bg-surface-muted/50 p-3.5 flex gap-4">
+        <div className="border-b border-border bg-surface-muted/50 p-3.5 flex gap-4">
           <div className="skeleton h-3.5 w-28" />
           <div className="skeleton h-3.5 w-24" />
           <div className="skeleton h-3.5 w-20" />
           <div className="skeleton h-3.5 w-20" />
           <div className="skeleton h-3.5 w-32" />
         </div>
-        <div className="divide-y divide-border/60 p-2 space-y-2">
+        <div className="divide-y divide-border p-2 space-y-2">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center justify-between p-3">
               <div className="flex items-center gap-3">

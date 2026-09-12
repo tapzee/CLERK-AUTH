@@ -24,7 +24,7 @@ export default function AppError({
   return (
     <section className="mx-auto max-w-lg space-y-6 py-16 text-center">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-xl font-semibold tracking-[-0.02em] sm:text-2xl">
           Something broke on the server
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-sm text-muted text-pretty">
@@ -33,16 +33,16 @@ export default function AppError({
         </p>
       </div>
 
-      <dl className="mx-auto max-w-sm space-y-2 rounded-2xl border border-dashed border-border px-5 py-4 text-left">
+      <dl className="mx-auto max-w-sm space-y-3 rounded-[10px] border border-border bg-surface-sunken px-5 py-4 text-left">
         <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">Message</dt>
+          <dt className="label mb-0">Message</dt>
           <dd className="mt-0.5 break-words font-mono text-xs">
             {error.message || "withheld in production"}
           </dd>
         </div>
         {error.digest && (
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Reference</dt>
+            <dt className="label mb-0">Reference</dt>
             <dd className="mt-0.5 break-words font-mono text-xs">{error.digest}</dd>
           </div>
         )}
@@ -50,7 +50,7 @@ export default function AppError({
 
       <button
         onClick={reset}
-        className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition hover:opacity-90"
+        className="btn btn-primary px-5 py-2.5"
       >
         Try again
       </button>

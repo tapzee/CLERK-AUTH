@@ -41,7 +41,7 @@ export function PayrollBoard({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <label className="flex items-center gap-2 text-sm font-medium">
           <Calendar className="h-4 w-4 text-accent" />
           <span className="text-muted text-xs uppercase tracking-wider">Payroll Month</span>
@@ -174,7 +174,7 @@ function PayrollRow({
     <Card className="p-4 transition-all hover:border-border">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent text-sm font-bold">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent text-sm font-semibold">
             {staff.fullName.charAt(0)}
           </div>
           <div className="min-w-0">
@@ -195,7 +195,7 @@ function PayrollRow({
         </div>
 
         <div className="text-right">
-          <p className="text-xl font-bold tabular-nums text-foreground">{formatMoney(shown.net)}</p>
+          <p className="text-xl font-semibold tabular-nums text-foreground">{formatMoney(shown.net)}</p>
           {run ? (
             <Pill tone={STATUS_TONE[run.status]}>{STATUS_LABEL[run.status]}</Pill>
           ) : (
@@ -278,7 +278,7 @@ function Decision({
 
   if (run.status === "pending") {
     return (
-      <form action={decide} className="mt-4 space-y-3 border-t border-border/60 pt-3">
+      <form action={decide} className="mt-4 space-y-3 border-t border-border pt-3">
         <input type="hidden" name="runId" value={run.id} />
         <input type="hidden" name="periodMonth" value={month} />
 
@@ -314,7 +314,7 @@ function Decision({
 
   if (run.status === "approved") {
     return (
-      <form action={pay} className="mt-4 space-y-3 border-t border-border/60 pt-3">
+      <form action={pay} className="mt-4 space-y-3 border-t border-border pt-3">
         <input type="hidden" name="runId" value={run.id} />
         <FormFeedback state={paidState} />
         <SubmitButton

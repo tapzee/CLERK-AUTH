@@ -187,8 +187,8 @@ function CartForm({
 
   return (
     <Card className="border-accent/30 p-5 shadow-lg">
-      <div className="mb-4 flex items-center justify-between border-b border-border/70 pb-3">
-        <p className="font-bold text-base text-foreground">
+      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+        <p className="font-semibold text-base text-foreground">
           {cart ? `Edit Cart · ${cart.name}` : "Configure New Food Cart"}
         </p>
       </div>
@@ -218,13 +218,13 @@ function CartForm({
         </div>
 
         {/* Location Pin */}
-        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+        <fieldset className="space-y-3.5 border-t border-border pt-4">
           <legend className="sr-only">Geofence Coordinates</legend>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Crosshair className="h-4 w-4 text-accent" />
-              <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+              <p className="font-semibold text-xs uppercase tracking-wider text-foreground">
                 GPS Pin &amp; Geofence Radius
               </p>
             </div>

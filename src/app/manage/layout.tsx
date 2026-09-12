@@ -27,17 +27,15 @@ export default async function ManageLayout({ children }: { children: React.React
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-5">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-accent">
-            Management Console
-          </p>
+          <p className="overline">Management console</p>
           <div className="mt-1 flex flex-wrap items-center gap-2.5">
-            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+            <h2 className="text-xl font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
               {viewer.fullName}
             </h2>
-            <Pill tone="accent" className="font-mono text-xs">
-              <Shield className="h-3 w-3 inline mr-1" />
+            <Pill tone="accent">
+              <Shield className="h-3 w-3" />
               {ROLE_LABELS[viewer.role]}
             </Pill>
           </div>
@@ -49,15 +47,15 @@ export default async function ManageLayout({ children }: { children: React.React
           for them.
         */}
         {can(viewer.role, "attendance:punch") && (
-          <Link href="/punch" className="btn btn-ghost shadow-sm text-xs sm:text-sm">
-            <Camera className="h-4 w-4 text-accent" />
-            <span>Punch Screen</span>
+          <Link href="/punch" className="btn btn-ghost text-[13px]">
+            <Camera className="h-3.5 w-3.5" />
+            <span>Punch screen</span>
           </Link>
         )}
       </header>
 
       {!hasUsableScope(viewer) && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning-soft p-4 text-xs font-medium text-warning">
+        <div className="flex items-start gap-2.5 rounded-[10px] border border-warning/25 bg-warning-soft p-4 text-xs leading-relaxed text-warning">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="text-pretty">
             You are not assigned to a cart, so there is nothing in scope for you to manage.

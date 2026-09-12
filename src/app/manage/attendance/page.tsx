@@ -50,8 +50,8 @@ export default async function AttendancePage({
           {/* Desktop Table View */}
           <Card className="hidden overflow-hidden md:block">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-border/80 bg-surface-muted/50">
-                <tr className="text-[11px] font-bold uppercase tracking-wider text-muted">
+              <thead className="border-b border-border bg-surface-muted/50">
+                <tr className="text-[11px] font-semibold uppercase tracking-wider text-muted">
                   <th className="px-4 py-3">Worker</th>
                   <th className="px-4 py-3">Assigned Shift</th>
                   <th className="px-4 py-3">Check In</th>
@@ -59,7 +59,7 @@ export default async function AttendancePage({
                   <th className="px-4 py-3">Uniform Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
+              <tbody className="divide-y divide-border">
                 {sheet.map((row) => (
                   <tr
                     key={row.staff.id}
@@ -67,7 +67,7 @@ export default async function AttendancePage({
                   >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="grid h-7 w-7 place-items-center rounded-lg bg-surface-muted text-xs font-bold text-foreground">
+                        <div className="grid h-7 w-7 place-items-center rounded-lg bg-surface-muted text-xs font-semibold text-foreground">
                           {row.staff.fullName.charAt(0)}
                         </div>
                         <div>
@@ -108,9 +108,9 @@ export default async function AttendancePage({
             {sheet.map((row) => (
               <li key={row.staff.id}>
                 <Card className="p-4">
-                  <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+                  <div className="flex items-center justify-between gap-2 border-b border-border pb-2.5">
                     <div className="flex items-center gap-2">
-                      <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
+                      <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-semibold text-accent">
                         {row.staff.fullName.charAt(0)}
                       </div>
                       <p className="font-semibold text-foreground text-sm">{row.staff.fullName}</p>

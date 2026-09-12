@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, Clock, UserX, ShieldAlert, CheckCircle, ArrowRight, Banknote, ShieldCheck } from "lucide-react";
+import { Users, Clock, UserX, ShieldAlert, CheckCircle, ArrowRight, Banknote } from "lucide-react";
 
 import { can } from "@/lib/auth/rbac";
 import { requirePageAccess, type Viewer } from "@/lib/auth/viewer";
@@ -72,7 +72,7 @@ export default async function OverviewPage() {
                 <ShieldAlert className="h-5 w-5 animate-pulse" />
               </div>
               <div>
-                <p className="flex items-center gap-2 font-bold text-foreground text-sm sm:text-base">
+                <p className="flex items-center gap-2 font-semibold text-foreground text-sm sm:text-base">
                   <span>Uniform Review Required</span>
                   <Pill tone="warning">{reviews.length} waiting</Pill>
                 </p>
@@ -106,14 +106,14 @@ async function PayrollWaiting({ viewer }: { viewer: Viewer }) {
   const total = pending.reduce((sum, line) => sum + (line.run?.net ?? 0), 0);
 
   return (
-    <Card className="border-accent/40 bg-accent-soft/40 p-5 shadow-lg shadow-accent/5">
+    <Card className="border-accent/40 bg-accent-soft/40 p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent/20 text-accent border border-accent/30 shadow-sm">
             <Banknote className="h-5 w-5" />
           </div>
           <div>
-            <p className="flex items-center gap-2 font-bold text-foreground text-sm sm:text-base">
+            <p className="flex items-center gap-2 font-semibold text-foreground text-sm sm:text-base">
               <span>Payroll Approvals Waiting</span>
               <Pill tone="accent">{pending.length} pending</Pill>
             </p>
@@ -152,12 +152,12 @@ function LateList({ sheet }: { sheet: Awaited<ReturnType<typeof getDaySheet>> })
 
   if (problems.length === 0) {
     return (
-      <Card className="flex items-center justify-center gap-3.5 px-5 py-8 text-center border-emerald-500/30 bg-emerald-500/5">
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-emerald-500/20 text-emerald-400">
+      <Card className="flex items-center justify-center gap-3.5 border-success/25 bg-success-soft px-5 py-8 text-center">
+        <div className="grid h-9 w-9 place-items-center rounded-full bg-success/15 text-success">
           <CheckCircle className="h-5 w-5" />
         </div>
         <div className="text-left">
-          <p className="text-sm font-bold text-emerald-400">Everyone is on shift and on time.</p>
+          <p className="text-sm font-semibold text-success">Everyone is on shift and on time.</p>
           <p className="text-xs text-muted">No attendance anomalies detected today.</p>
         </div>
       </Card>
@@ -166,24 +166,24 @@ function LateList({ sheet }: { sheet: Awaited<ReturnType<typeof getDaySheet>> })
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-border/70 px-5 py-3.5 bg-surface-muted/40">
-        <p className="text-xs font-extrabold uppercase tracking-wider text-foreground">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-surface-muted/40">
+        <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
           Needs Attention ({problems.length})
         </p>
         <span className="font-mono text-xs text-muted">Real-time attendance log</span>
       </div>
-      <ul className="divide-y divide-border/60">
+      <ul className="divide-y divide-border">
         {problems.map((row) => (
           <li
             key={row.staff.id}
             className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5 transition-colors hover:bg-surface-muted/40"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-muted text-xs font-bold text-foreground border border-border/70">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-muted text-xs font-semibold text-foreground border border-border">
                 {row.staff.fullName.charAt(0)}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-foreground">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {row.staff.fullName}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">

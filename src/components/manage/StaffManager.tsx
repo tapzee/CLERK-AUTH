@@ -77,7 +77,7 @@ export function StaffManager({
             <li key={member.id}>
               <Card className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-4 transition-all hover:border-border">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-sm font-bold text-accent">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-sm font-semibold text-accent">
                     {member.fullName.charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -170,8 +170,8 @@ function StaffForm({
 
   return (
     <Card className="border-accent/30 p-5 shadow-lg">
-      <div className="mb-4 flex items-center justify-between border-b border-border/70 pb-3">
-        <p className="font-bold text-base text-foreground">
+      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+        <p className="font-semibold text-base text-foreground">
           {member ? `Edit Staff · ${member.fullName}` : "Enrol New Staff Member"}
         </p>
       </div>
@@ -254,7 +254,7 @@ function StaffForm({
         </div>
 
         {canSetRoles && (
-          <dl className="space-y-1.5 rounded-xl border border-border/50 bg-surface-muted/50 p-3.5 text-xs">
+          <dl className="space-y-1.5 rounded-xl border border-border bg-surface-muted/50 p-3.5 text-xs">
             {ROLES.map((role: Role) => (
               <div key={role} className="flex flex-wrap gap-x-2">
                 <dt className="font-semibold text-foreground">{ROLE_LABELS[role]}:</dt>
@@ -269,7 +269,7 @@ function StaffForm({
           <div className="rounded-xl border border-accent/20 bg-accent-soft/30 p-4">
             <div className="flex items-center gap-2 text-accent">
               <Shield className="h-4 w-4" />
-              <p className="font-bold text-xs uppercase tracking-wider">Owner / System Administrator</p>
+              <p className="font-semibold text-xs uppercase tracking-wider">Owner / System Administrator</p>
             </div>
             <p className="mt-1.5 text-xs text-muted">
               Owners have unrestricted administrative access to all carts, settings, roles, and payroll approvals.
@@ -287,7 +287,7 @@ function StaffForm({
             <div className="rounded-xl border border-accent/20 bg-accent-soft/30 p-4">
               <div className="flex items-center gap-2 text-accent">
                 <Clock className="h-4 w-4" />
-                <p className="font-bold text-xs uppercase tracking-wider">Flexible Working Hours</p>
+                <p className="font-semibold text-xs uppercase tracking-wider">Flexible Working Hours</p>
               </div>
               <p className="mt-1.5 text-xs text-muted">
                 Managers have flexible working hours. Fixed shift times, grace window, and late deductions do not apply.
@@ -298,11 +298,11 @@ function StaffForm({
               <input type="hidden" name="graceMinutes" value="0" />
             </div>
 
-            <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+            <fieldset className="space-y-3.5 border-t border-border pt-4">
               <legend className="sr-only">Salary Configuration</legend>
               <div className="flex items-center gap-2">
                 <Banknote className="h-4 w-4 text-accent" />
-                <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                <p className="font-semibold text-xs uppercase tracking-wider text-foreground">
                   Compensation
                 </p>
               </div>
@@ -339,11 +339,11 @@ function StaffForm({
           </>
         ) : (
           <>
-            <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+            <fieldset className="space-y-3.5 border-t border-border pt-4">
               <legend className="sr-only">Shift Configuration</legend>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-accent" />
-                <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                <p className="font-semibold text-xs uppercase tracking-wider text-foreground">
                   Shift &amp; Grace Settings
                 </p>
               </div>
@@ -379,11 +379,11 @@ function StaffForm({
               </div>
             </fieldset>
 
-            <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+            <fieldset className="space-y-3.5 border-t border-border pt-4">
               <legend className="sr-only">Salary Configuration</legend>
               <div className="flex items-center gap-2">
                 <Banknote className="h-4 w-4 text-accent" />
-                <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                <p className="font-semibold text-xs uppercase tracking-wider text-foreground">
                   Compensation &amp; Deductions
                 </p>
               </div>

@@ -14,16 +14,12 @@ export async function AppNav() {
 
   if (state.status === "signed-out") {
     return (
-      <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-1">
         <SignInButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
-          <button className="rounded-full px-4 py-1.5 font-medium text-muted transition hover:bg-surface-muted hover:text-foreground">
-            Sign in
-          </button>
+          <button className="btn btn-quiet py-1.5 text-[13px]">Sign in</button>
         </SignInButton>
         <SignUpButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
-          <button className="btn btn-primary py-1.5 text-xs shadow-sm sm:text-sm">
-            Sign up
-          </button>
+          <button className="btn btn-primary py-1.5 text-[13px]">Sign up</button>
         </SignUpButton>
       </div>
     );
@@ -51,22 +47,21 @@ export async function AppNav() {
   }
 
   return (
-    <div className="flex items-center gap-1.5 text-sm">
-      <div className="flex items-center gap-1 rounded-full border border-border/60 bg-surface/60 p-1 backdrop-blur-md">
+    <div className="flex items-center gap-1 sm:gap-2">
+      <nav className="flex items-center gap-0.5">
         {links.map((link) => (
           <Link
             key={link.href}
             href={link.href}
             prefetch={true}
-            className="rounded-full px-3.5 py-1 text-xs font-medium text-muted transition-all duration-150 hover:bg-surface-muted hover:text-foreground sm:text-sm"
+            className="rounded-[8px] px-2.5 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
           >
             {link.label}
           </Link>
         ))}
-      </div>
-      <div className="ml-1 flex items-center">
-        <UserButton />
-      </div>
+      </nav>
+      <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden />
+      <UserButton />
     </div>
   );
 }

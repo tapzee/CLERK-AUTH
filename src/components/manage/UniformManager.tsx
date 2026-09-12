@@ -101,7 +101,7 @@ export function UniformManager({ uniforms }: { uniforms: UniformRecord[] }) {
                   </button>
                 </div>
 
-                <div className="mt-4 border-t border-border/60 pt-3">
+                <div className="mt-4 border-t border-border pt-3">
                   <p className="label mb-1.5">What Counts Toward The Score</p>
                   <ul className="flex flex-wrap gap-1.5">
                     {ITEM_KEYS.map((key) => (
@@ -146,8 +146,8 @@ function UniformForm({
 
   return (
     <Card className="border-accent/30 p-5 shadow-lg">
-      <div className="mb-4 flex items-center justify-between border-b border-border/70 pb-3">
-        <p className="font-bold text-base text-foreground">
+      <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+        <p className="font-semibold text-base text-foreground">
           {uniform ? `Edit Uniform · ${uniform.name}` : "Define Uniform Standard"}
         </p>
       </div>
@@ -178,7 +178,7 @@ function UniformForm({
           />
         </Field>
 
-        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+        <fieldset className="space-y-3.5 border-t border-border pt-4">
           <legend className="sr-only">Passing threshold</legend>
           <Field
             label="Passing Score Threshold (out of 100)"
@@ -213,7 +213,7 @@ function References({ uniform }: { uniform: UniformRecord }) {
   const byKind = new Map(uniform.references.map((reference) => [reference.kind, reference]));
 
   return (
-    <div className="mt-4 border-t border-border/60 pt-3">
+    <div className="mt-4 border-t border-border pt-3">
       <p className="label mb-0.5">Reference Garment Photos</p>
       <p className="mb-2 text-[11px] text-muted text-pretty">
         Every check reads the logo photo directly, for an exact match. Everything
@@ -275,8 +275,8 @@ function ReferenceSlot({
   const isLogo = kind === "logo";
 
   return (
-    <div className="space-y-2 rounded-xl border border-border/60 bg-surface/40 p-2.5">
-      <div className="relative aspect-square overflow-hidden rounded-lg border border-border/80 bg-neutral-900">
+    <div className="space-y-2 rounded-xl border border-border bg-surface/40 p-2.5">
+      <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-neutral-900">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element -- short-lived signed/object URL
           <img src={url} alt={ITEM_LABELS[kind]} className="h-full w-full object-cover" />

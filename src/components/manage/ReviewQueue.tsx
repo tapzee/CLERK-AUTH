@@ -65,16 +65,16 @@ function ReviewCard({ item }: { item: ReviewItem }) {
               <span>Photo expired or unavailable</span>
             </div>
           )}
-          <div className="absolute top-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-mono text-white backdrop-blur">
+          <div className="absolute top-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-mono text-white">
             Live Check-in
           </div>
         </div>
 
         <div className="flex flex-col justify-between p-5">
           <div className="space-y-3.5">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border/60 pb-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
+                <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-semibold text-accent">
                   {item.staffName.charAt(0)}
                 </div>
                 <p className="font-semibold text-foreground">{item.staffName}</p>
@@ -92,7 +92,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
             <Verdict item={item} />
           </div>
 
-          <form action={action} className="mt-4 space-y-3 border-t border-border/60 pt-4">
+          <form action={action} className="mt-4 space-y-3 border-t border-border pt-4">
             <input type="hidden" name="eventId" value={item.eventId} />
 
             <input
@@ -152,7 +152,7 @@ function Verdict({ item }: { item: ReviewItem }) {
   return (
     <div className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Pill tone={tone} className="font-mono font-bold">
+        <Pill tone={tone} className="font-mono font-semibold">
           <ShieldAlert className="h-3 w-3 inline mr-1" />
           {check.score !== null ? `${check.score}/100 Score` : (check.verdict ?? "Review")}
         </Pill>

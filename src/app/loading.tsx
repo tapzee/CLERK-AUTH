@@ -2,8 +2,8 @@ export default function GlobalLoading() {
   return (
     <div className="w-full space-y-6 py-6 animate-pulse">
       {/* Top micro progress indicator */}
-      <div className="fixed top-0 left-0 right-0 z-50 h-1 overflow-hidden bg-surface-muted/50">
-        <div className="h-full w-2/3 bg-accent animate-pulse" />
+      <div className="fixed top-0 right-0 left-0 z-50 h-0.5 overflow-hidden bg-surface-muted">
+        <div className="h-full w-2/3 animate-pulse bg-accent" />
       </div>
       <div className="space-y-2.5">
         <div className="skeleton h-7 w-48" />

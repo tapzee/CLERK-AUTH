@@ -47,19 +47,15 @@ export function ConsoleNav({ items }: { items: NavItem[] }) {
                 prefetch={true}
                 aria-current={current ? "page" : undefined}
                 className={`
-                  group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold tracking-tight transition-all duration-150 sm:text-sm
+                  flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-[13px] font-medium tracking-[-0.01em] transition-colors duration-150
                   ${
                     current
-                      ? "bg-accent text-accent-foreground shadow-sm shadow-accent/25"
-                      : "text-muted hover:bg-surface hover:text-foreground border border-transparent hover:border-border/40"
+                      ? "bg-ink text-ink-foreground"
+                      : "text-muted hover:bg-surface-muted hover:text-foreground"
                   }
                 `}
               >
-                <Icon
-                  className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-110 ${
-                    current ? "text-accent-foreground" : "text-muted group-hover:text-foreground"
-                  }`}
-                />
+                <Icon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{item.label}</span>
               </Link>
             </li>

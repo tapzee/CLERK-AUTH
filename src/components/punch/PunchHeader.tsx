@@ -17,12 +17,12 @@ export function WorkerCard({ worker }: { worker: AttendanceStatus["worker"] }) {
     <Card className="p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-sm font-bold text-accent shadow-sm border border-accent/20">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-sm font-semibold text-accent shadow-sm border border-accent/20">
             {worker.fullName.charAt(0)}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="font-bold text-foreground text-sm sm:text-base">{worker.fullName}</p>
+              <p className="font-semibold text-foreground text-sm sm:text-base">{worker.fullName}</p>
               <Pill tone="accent" className="font-mono text-[10px]">
                 {worker.role}
               </Pill>
@@ -35,7 +35,7 @@ export function WorkerCard({ worker }: { worker: AttendanceStatus["worker"] }) {
         </div>
 
         {worker.shiftStart ? (
-          <div className="flex items-center gap-2 rounded-xl bg-surface-muted/50 px-3 py-1.5 text-xs text-muted border border-border/60">
+          <div className="flex items-center gap-2 rounded-xl bg-surface-muted/50 px-3 py-1.5 text-xs text-muted border border-border">
             <Clock className="h-3.5 w-3.5 text-accent" />
             <span className="font-mono">
               Shift: {worker.shiftStart.slice(0, 5)}
@@ -43,7 +43,7 @@ export function WorkerCard({ worker }: { worker: AttendanceStatus["worker"] }) {
             </span>
           </div>
         ) : (
-          <div className="rounded-xl bg-surface-muted/50 px-3 py-1.5 text-xs text-muted border border-border/60">
+          <div className="rounded-xl bg-surface-muted/50 px-3 py-1.5 text-xs text-muted border border-border">
             {worker.role === "manager" ? "Flexible manager hours" : "No fixed shift assigned"}
           </div>
         )}
@@ -70,10 +70,10 @@ export function GeofenceBar({
 }) {
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs transition-all duration-300 sm:text-sm backdrop-blur-md ${
+      className={`flex items-center justify-between gap-3 rounded-[12px] border px-4 py-3 text-xs transition-colors duration-200 sm:text-sm ${
         fence.ok
-          ? "border-emerald-500/40 bg-emerald-500/10 text-foreground shadow-sm shadow-emerald-500/5"
-          : "border-border bg-surface-glass text-muted"
+          ? "border-success/30 bg-success-soft text-foreground"
+          : "border-border bg-surface text-muted"
       }`}
     >
       <div className="flex items-center gap-2.5 min-w-0">
@@ -87,13 +87,13 @@ export function GeofenceBar({
         </span>
       </div>
       {geo.status === "denied" ? (
-        <button onClick={geo.retry} className="shrink-0 font-semibold text-accent underline">
+        <button onClick={geo.retry} className="shrink-0 font-medium text-accent underline">
           Retry GPS
         </button>
       ) : fence.ok ? (
-        <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-emerald-500/20 px-2.5 py-0.5 font-mono text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+        <div className="flex shrink-0 items-center gap-1.5 rounded-[6px] border border-success/25 bg-success/10 px-2 py-0.5 font-mono text-[10px] font-medium text-success">
           <ShieldCheck className="h-3 w-3" />
-          <span>VERIFIED</span>
+          <span>verified</span>
         </div>
       ) : (
         <div className="flex items-center gap-1 shrink-0 font-mono text-[10px] text-muted">

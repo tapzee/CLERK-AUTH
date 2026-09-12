@@ -71,7 +71,7 @@ export function PunchActions({
       <div className="flex flex-col gap-2.5 sm:flex-row">
         <button
           onClick={onCapture}
-          className="btn btn-primary flex-1 py-3.5 text-base shadow-lg shadow-accent/20"
+          className="btn btn-primary flex-1 py-3.5 text-base"
         >
           <Camera className="h-5 w-5" />
           <span>Capture photo</span>
@@ -93,7 +93,7 @@ export function PunchActions({
         onClick={onStart}
         disabled={!canPunch}
         title={blockedReason}
-        className="btn btn-primary w-full py-3.5 text-sm sm:text-base shadow-lg shadow-accent/20"
+        className="btn btn-primary w-full py-3.5 text-sm sm:text-base"
       >
         <Camera className="h-5 w-5" />
         <span>
@@ -108,7 +108,7 @@ export function PunchActions({
         onClick={onBrowse}
         disabled={!canPunch}
         title={blockedReason}
-        className="btn btn-secondary w-full py-3.5 text-sm sm:text-base border border-border/80 bg-surface-glass hover:bg-surface-muted"
+        className="btn btn-secondary w-full py-3.5 text-sm sm:text-base border border-border bg-surface hover:bg-surface-muted"
       >
         <Upload className="h-5 w-5 text-accent" />
         <span>Upload photo</span>
@@ -134,7 +134,7 @@ export function BlinkToggle({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-2xl border border-border/80 bg-surface-glass p-3.5 text-sm transition hover:border-border cursor-pointer">
+    <label className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3.5 text-sm transition hover:border-border cursor-pointer">
       <div className="mt-0.5 grid h-6 w-6 place-items-center rounded-lg bg-accent-soft text-accent">
         <Eye className="h-3.5 w-3.5" />
       </div>

@@ -97,7 +97,7 @@ function NotEnrolled({ email }: { email: string | null }) {
         title="You are not enrolled yet"
         body="Your manager has to add you before you can punch. Provide the registered email address below:"
       >
-        <code className="mx-auto mt-2 block max-w-sm overflow-x-auto rounded-xl border border-border/60 bg-surface px-3.5 py-2 font-mono text-xs text-foreground">
+        <code className="mx-auto mt-2 block max-w-sm overflow-x-auto rounded-xl border border-border bg-surface px-3.5 py-2 font-mono text-xs text-foreground">
           {email ?? "No verified email on this account"}
         </code>
         {!email && (

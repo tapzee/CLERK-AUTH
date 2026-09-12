@@ -5,15 +5,16 @@ import { DEFAULT_TIMEZONE, formatLocalTime } from "@/lib/time";
 /**
  * The core design shapes every screen is built from.
  *
- * Presentational, server-compatible primitives styled with glassmorphism,
- * hardware acceleration, and crisp micro-typography.
+ * Presentational, server-compatible primitives. Flat surfaces, hairline
+ * borders, mono for anything numeric -- see the notes at the top of
+ * `globals.css` for why there is no glass or glow in here.
  */
 
 export type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
 
-/** Background, text, and delicate border pairs for each tone */
+/** Background, text, and hairline border trio for each tone */
 const TONE_CLASSES: Record<Tone, string> = {
-  neutral: "bg-surface-muted text-muted border-border/50",
+  neutral: "bg-surface-muted text-muted border-border",
   accent: "bg-accent-soft text-accent border-accent/20",
   success: "bg-success-soft text-success border-success/20",
   warning: "bg-warning-soft text-warning border-warning/20",
@@ -30,13 +31,11 @@ export function Pill({
   className?: string;
 }) {
   return (
-    <span className={`pill ${TONE_CLASSES[tone]} ${className}`}>
-      {children}
-    </span>
+    <span className={`pill ${TONE_CLASSES[tone]} ${className}`}>{children}</span>
   );
 }
 
-/** A filled dot with an optional subtle pulse, for at-a-glance status */
+/** A filled dot with an optional pulse, for at-a-glance status */
 export function Dot({
   tone = "neutral",
   pulse = false,
@@ -45,7 +44,7 @@ export function Dot({
   pulse?: boolean;
 }) {
   const colour: Record<Tone, string> = {
-    neutral: "bg-muted",
+    neutral: "bg-faint",
     accent: "bg-accent",
     success: "bg-success",
     warning: "bg-warning",
@@ -53,13 +52,15 @@ export function Dot({
   };
 
   return (
-    <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+    <span className="relative flex h-1.5 w-1.5 shrink-0 items-center justify-center">
       {pulse && (
         <span
-          className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${colour[tone]}`}
+          className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${colour[tone]}`}
         />
       )}
-      <span className={`relative inline-flex h-2 w-2 rounded-full ${colour[tone]}`} />
+      <span
+        className={`relative inline-flex h-1.5 w-1.5 rounded-full ${colour[tone]}`}
+      />
     </span>
   );
 }
@@ -74,7 +75,7 @@ export function Card({
   hoverable?: boolean;
 }) {
   return (
-    <div className={`card gpu-layer ${hoverable ? "card-hover" : ""} ${className}`}>
+    <div className={`card ${hoverable ? "card-hover" : ""} ${className}`}>
       {children}
     </div>
   );
@@ -92,19 +93,16 @@ export function PageHeader({
   eyebrow?: string;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
+    <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
       <div className="min-w-0">
-        {eyebrow && (
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-accent/25 bg-accent-soft px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-accent backdrop-blur-md mb-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            <span>{eyebrow}</span>
-          </div>
-        )}
-        <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+        {eyebrow && <p className="overline mb-2">{eyebrow}</p>}
+        <h1 className="text-xl font-semibold tracking-[-0.02em] text-foreground sm:text-2xl">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-xs text-muted sm:text-sm text-pretty">{description}</p>
+          <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-muted text-pretty">
+            {description}
+          </p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -124,8 +122,12 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-base font-bold tracking-tight text-foreground">{title}</h2>
-        {description && <p className="mt-0.5 text-xs text-muted text-pretty">{description}</p>}
+        <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+          {title}
+        </h2>
+        {description && (
+          <p className="mt-0.5 text-xs text-muted text-pretty">{description}</p>
+        )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -144,15 +146,19 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-dashed border-border bg-surface-glass/40 px-6 py-12 text-center backdrop-blur-md">
+    <div className="rounded-[14px] border border-border bg-surface-sunken px-6 py-12 text-center">
       {icon && (
-        <div className="mx-auto mb-3.5 grid h-12 w-12 place-items-center rounded-2xl bg-accent-soft border border-accent/15 text-accent shadow-sm">
+        <div className="mx-auto mb-4 grid h-9 w-9 place-items-center rounded-[10px] border border-border bg-surface text-muted">
           {icon}
         </div>
       )}
-      <p className="text-sm font-bold text-foreground">{title}</p>
+      <p className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+        {title}
+      </p>
       {body && (
-        <p className="mx-auto mt-1.5 max-w-sm text-xs text-muted text-pretty">{body}</p>
+        <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-muted text-pretty">
+          {body}
+        </p>
       )}
       {children && <div className="mt-5">{children}</div>}
     </div>
@@ -173,7 +179,11 @@ export function Field({
     <label className="block">
       <span className="label">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-[11px] text-muted text-pretty">{hint}</span>}
+      {hint && (
+        <span className="mt-1.5 block text-[11px] text-faint text-pretty">
+          {hint}
+        </span>
+      )}
     </label>
   );
 }
@@ -200,36 +210,30 @@ export function Stat({
     danger: "text-danger",
   };
 
-  const bgGlow: Record<Tone, string> = {
-    neutral: "hover:border-border",
-    accent: "hover:border-accent/40 hover:shadow-accent/10",
-    success: "hover:border-success/40 hover:shadow-success/10",
-    warning: "hover:border-warning/40 hover:shadow-warning/10",
-    danger: "hover:border-danger/40 hover:shadow-danger/10",
-  };
-
-  const iconBg: Record<Tone, string> = {
-    neutral: "bg-surface-muted text-muted",
-    accent: "bg-accent-soft text-accent border border-accent/20",
-    success: "bg-success-soft text-success border border-success/20",
-    warning: "bg-warning-soft text-warning border border-warning/20",
-    danger: "bg-danger-soft text-danger border border-danger/20",
+  const iconTone: Record<Tone, string> = {
+    neutral: "text-faint",
+    accent: "text-accent",
+    success: "text-success",
+    warning: "text-warning",
+    danger: "text-danger",
   };
 
   return (
-    <Card className={`p-4 sm:p-5 transition-all duration-200 hover:shadow-lg ${bgGlow[tone]}`}>
+    <Card className="p-4 sm:p-5">
       <div className="flex items-center justify-between gap-2">
         <p className="label mb-0">{label}</p>
-        {icon && (
-          <div className={`grid h-8 w-8 place-items-center rounded-xl text-xs font-semibold ${iconBg[tone]}`}>
-            {icon}
-          </div>
-        )}
+        {icon && <span className={iconTone[tone]}>{icon}</span>}
       </div>
-      <p className={`mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums ${valueTone[tone]}`}>
+      <p
+        className={`mt-3 font-mono text-2xl tnum font-medium tracking-[-0.02em] ${valueTone[tone]}`}
+      >
         {value}
       </p>
-      {detail && <p className="mt-1 text-xs text-muted text-pretty">{detail}</p>}
+      {detail && (
+        <p className="mt-1.5 text-xs leading-relaxed text-muted text-pretty">
+          {detail}
+        </p>
+      )}
     </Card>
   );
 }
@@ -253,7 +257,7 @@ export function LocalTime({
       dateTime={at}
       suppressHydrationWarning
       title={at}
-      className="font-mono text-xs tabular-nums"
+      className="font-mono text-xs tnum"
     >
       {formatLocalTime(at, { timeZone })}
     </time>

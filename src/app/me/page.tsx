@@ -128,8 +128,8 @@ export default async function MyRecordPage({
       </div>
 
       {record.monthlySalary !== null && (
-        <Card className="p-5 sm:p-6 border-accent/30 bg-surface-glass shadow-lg">
-          <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+        <Card className="p-5 sm:p-6 border-accent/30 bg-surface shadow-lg">
+          <div className="flex items-center gap-2 border-b border-border pb-3">
             <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-accent">
               <Calculator className="h-4 w-4" />
             </div>
@@ -152,14 +152,14 @@ export default async function MyRecordPage({
                 tone="danger"
               />
             )}
-            <div className="flex items-baseline justify-between gap-4 border-t border-border/80 pt-3.5 font-bold text-foreground sm:text-base">
+            <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3.5 font-semibold text-foreground sm:text-base">
               <div>
-                <dt className="font-extrabold text-foreground">Calculated Take-Home Pay</dt>
+                <dt className="font-semibold text-foreground">Calculated Take-Home Pay</dt>
                 <p className="text-[11px] font-normal text-muted">
                   {run ? `Status: ${statusLine(run.status)}` : "Estimated before monthly final run"}
                 </p>
               </div>
-              <dd className="font-mono text-accent tabular-nums text-xl sm:text-2xl font-extrabold">
+              <dd className="font-mono text-accent tabular-nums text-xl sm:text-2xl font-semibold">
                 {formatMoney(pay.net)}
               </dd>
             </div>
@@ -179,7 +179,7 @@ export default async function MyRecordPage({
             title="No punches recorded for this month"
           />
         ) : (
-          <Card className="divide-y divide-border/60 p-0 overflow-hidden">
+          <Card className="divide-y divide-border p-0 overflow-hidden">
             {punches.map((punch) => {
               const faults = describeFaults(punch.dressCheck?.items ?? null);
 
@@ -257,8 +257,8 @@ function MonthTabs({ months, current }: { months: string[]; current: string }) {
           aria-current={month === current ? "page" : undefined}
           className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold tracking-tight transition-all sm:text-sm ${
             month === current
-              ? "bg-accent text-accent-foreground shadow-sm shadow-accent/20"
-              : "text-muted hover:bg-surface hover:text-foreground border border-transparent hover:border-border/50"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted hover:bg-surface hover:text-foreground border border-transparent hover:border-border"
           }`}
         >
           {formatMonth(month)}

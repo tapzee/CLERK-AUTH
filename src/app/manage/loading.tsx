@@ -21,13 +21,13 @@ export default function ManageLoading() {
       </div>
 
       <div className="card p-5 space-y-4">
-        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+        <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="skeleton h-5 w-36" />
           <div className="skeleton h-4 w-20" />
         </div>
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-border/50">
+            <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-border">
               <div className="flex items-center gap-3">
                 <div className="skeleton h-8 w-8 rounded-lg" />
                 <div className="space-y-1.5">

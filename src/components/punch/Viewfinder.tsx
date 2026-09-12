@@ -56,30 +56,28 @@ export function Viewfinder({
         const file = event.dataTransfer.files?.[0];
         if (file) onDropFile(file);
       }}
-      className={`relative aspect-[3/4] w-full overflow-hidden rounded-3xl border bg-neutral-950 shadow-2xl transition-all duration-300 sm:aspect-[4/3] ${
-        isDragging ? "border-accent ring-4 ring-accent/30" : "border-border/80 shadow-accent/5"
+      className={`relative aspect-[3/4] w-full overflow-hidden rounded-[14px] border bg-[#0c0b0a] transition-colors duration-200 sm:aspect-[4/3] ${
+        isDragging ? "border-accent" : "border-border"
       }`}
     >
-      {/* High-Tech Biometric HUD corner brackets */}
+      {/* Framing marks, the way a camera app draws them */}
       <div className="pointer-events-none absolute inset-4 z-10 sm:inset-6">
-        <div className="absolute top-0 left-0 h-5 w-5 border-t-2 border-l-2 border-accent rounded-tl shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-        <div className="absolute top-0 right-0 h-5 w-5 border-t-2 border-r-2 border-accent rounded-tr shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-        <div className="absolute bottom-0 left-0 h-5 w-5 border-b-2 border-l-2 border-accent rounded-bl shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-        <div className="absolute bottom-0 right-0 h-5 w-5 border-b-2 border-r-2 border-accent rounded-br shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+        <div className="absolute top-0 left-0 h-4 w-4 border-t border-l border-white/40" />
+        <div className="absolute top-0 right-0 h-4 w-4 border-t border-r border-white/40" />
+        <div className="absolute bottom-0 left-0 h-4 w-4 border-b border-l border-white/40" />
+        <div className="absolute bottom-0 right-0 h-4 w-4 border-b border-r border-white/40" />
       </div>
 
       {/* Face Placement Target Guide (Visible during live framing) */}
       {phase.kind === "live" && !shot && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center">
           <div
-            className={`h-48 w-36 sm:h-56 sm:w-44 rounded-[40%] border-2 border-dashed transition-colors duration-300 ${
-              blink.faceDetected
-                ? "border-emerald-400/80 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
-                : "border-white/30 bg-black/10"
+            className={`h-48 w-36 rounded-[40%] border border-dashed transition-colors duration-200 sm:h-56 sm:w-44 ${
+              blink.faceDetected ? "border-white/70" : "border-white/30"
             }`}
           />
-          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-white/70 bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
-            {blink.faceDetected ? "✓ Face Locked & In Focus" : "Align face, cap & apron"}
+          <p className="mt-3 rounded-[6px] bg-black/55 px-2 py-0.5 font-mono text-[10px] tracking-[0.06em] text-white/80">
+            {blink.faceDetected ? "face in frame" : "align face, cap and apron"}
           </p>
         </div>
       )}
@@ -107,7 +105,7 @@ export function Viewfinder({
       )}
 
       {phase.kind === "live" && !shot && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-accent to-transparent opacity-90 animate-laser" />
+        <div className="animate-laser pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
       )}
 
       {!shot && phase.kind !== "live" && (
@@ -133,7 +131,7 @@ function DropTarget() {
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-accent text-white shadow-lg animate-bounce">
           <Upload className="h-7 w-7" />
         </div>
-        <p className="text-base font-bold text-white">Drop image to check in</p>
+        <p className="text-base font-semibold text-white">Drop image to check in</p>
         <p className="text-xs text-white/80">Release to verify uniform with Vision AI</p>
       </div>
     </div>
@@ -238,12 +236,12 @@ function BlinkOverlay({ blink }: { blink: BlinkState }) {
           <span className="font-medium">{blinkHint(blink)}</span>
         </div>
         {blink.faceDetected && (
-          <span className="font-mono text-[10px] text-white/70">AI Locked</span>
+          <span className="font-mono text-[10px] text-white/60">locked</span>
         )}
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/20 backdrop-blur">
+      <div className="h-1 overflow-hidden rounded-full bg-white/20">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-amber-400 to-accent transition-all duration-100 ease-out"
+          className="h-full rounded-full bg-white transition-[width] duration-100 ease-out"
           style={{ width: `${Math.round(blink.holdProgress * 100)}%` }}
         />
       </div>
