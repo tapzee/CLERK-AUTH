@@ -20,6 +20,7 @@ import {
   updateReferenceDescriptionAction,
   uploadReferenceAction,
 } from "@/app/manage/actions";
+import { shrinkImageFile } from "@/lib/image";
 import { IDLE, type ActionState } from "@/lib/manage/action-state";
 import type { UniformReference, UniformRecord } from "@/lib/manage/uniforms";
 import { ITEM_KEYS, ITEM_LABELS, REFERENCE_KEYS, type ItemKey } from "@/lib/uniform/items";
@@ -241,7 +242,18 @@ function ReferenceSlot({
   reference: UniformReference | undefined;
 }) {
   const [uploadState, upload] = useActionState<ActionState, FormData>(
-    uploadReferenceAction,
+    async (previous, data) => {
+      const picked = data.get("file");
+      if (picked instanceof File && picked.size > 0) {
+        // Photos picked off a phone or a disk run to several megabytes, which
+        // the Server Action body cap rejects before the action can run -- so
+        // the size has to come down here, not be explained server-side.
+        const shrunk = await shrinkImageFile(picked).catch(() => null);
+        if (!shrunk) return { ok: false, error: "That file could not be read as an image." };
+        data.set("file", shrunk);
+      }
+      return uploadReferenceAction(previous, data);
+    },
     IDLE,
   );
   const [, remove] = useActionState<ActionState, FormData>(deleteReferenceAction, IDLE);
