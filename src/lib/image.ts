@@ -64,12 +64,21 @@ export async function captureFrame(
   return blob ? { blob, width, height } : null;
 }
 
-/** Reads a picked file into a JPEG scaled to fit, for admin reference uploads. */
+/** Output formats that survive a canvas redraw with their transparency intact. */
+const ALPHA_SAFE_TYPES = new Set(["image/png", "image/webp"]);
+
+/**
+ * Reads a picked file into an image scaled to fit, for admin reference uploads.
+ *
+ * PNG and WebP come back as themselves. A logo uploaded as a cut-out would
+ * otherwise have its transparency flattened to black, and the logo is the one
+ * item a check compares photo-to-photo rather than in words.
+ */
 export async function shrinkImageFile(
   file: File,
   maxEdge = CAPTURE_MAX_EDGE,
   quality = 0.85,
-): Promise<Blob> {
+): Promise<File> {
   const bitmap = await createImageBitmap(file);
   const { width, height } = fitWithin(
     { width: bitmap.width, height: bitmap.height },
@@ -88,8 +97,9 @@ export async function shrinkImageFile(
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
+  const type = ALPHA_SAFE_TYPES.has(file.type) ? file.type : "image/jpeg";
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", quality),
+    canvas.toBlob(resolve, type, quality),
   );
-  return blob ?? file;
+  return blob ? new File([blob], file.name, { type: blob.type }) : file;
 }
