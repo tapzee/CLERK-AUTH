@@ -167,10 +167,11 @@ POST /api/attendance (kind=in)
    │  record punch ─────────────▶ 201 to the staff member
    │  queue dress_checks row
    ▼
-after()  ──▶ runDressCheckBatch()     ← fast path, ~2s
-Vercel Cron (every minute) ──▶ same      ← durable path: retries, bursts, crashes
+after()  ──▶ runDressCheckBatch()   ← fast path, ~2s
+punch screen poll ──▶ same          ← retries while someone is watching
+nightly cron ──▶ same               ← long-stop sweeper
    │
-   │  claim_dress_checks()  ← FOR UPDATE SKIP LOCKED, so the two never
+   │  claim_dress_checks()  ← FOR UPDATE SKIP LOCKED, so these never
    │                          pay for the same verdict twice
    ▼
 Gemini (one call per batch of 8) ──▶ verdict written to dress_checks
@@ -178,13 +179,26 @@ Gemini (one call per batch of 8) ──▶ verdict written to dress_checks
 
 The staff screen polls while a verdict is pending and stops once it settles.
 
-**Setup.** Run [`supabase/dress-checks.sql`](supabase/dress-checks.sql) and
-[`supabase/scoring.sql`](supabase/scoring.sql), then
-set `GEMINI_API_KEY` and `CRON_SECRET` (see `.env.local.example`). On Vercel,
-add both under Settings → Environment Variables; the schedule itself comes from
-[`vercel.json`](vercel.json) and Vercel presents `CRON_SECRET` as a bearer
-token, which the route checks. Without that check the worker — and the spend
-behind it — would be triggerable by anyone who found the path.
+**Setup.** Run [`supabase/dress-checks.sql`](supabase/dress-checks.sql),
+[`supabase/scoring.sql`](supabase/scoring.sql) and
+[`supabase/grading.sql`](supabase/grading.sql), then set `GEMINI_API_KEY` and
+`CRON_SECRET` (see `.env.local.example`). On Vercel, add both under
+Settings → Environment Variables — the build succeeds without them and the
+worker then fails at runtime, which is a confusing way to find out.
+
+Vercel presents `CRON_SECRET` to the cron route as a bearer token, which the
+route checks. Without that the worker — and the spend behind it — would be
+triggerable by anyone who found the path.
+
+**The schedule is daily, and that is a plan limit, not a preference.** Hobby
+accounts reject any cron more frequent than once a day, and the *deployment
+fails* rather than the schedule degrading. So the nightly run is a long-stop
+sweeper, and two things carry the real load: `after()` on the punch, and the
+punch screen, which re-renders every couple of seconds while a verdict is
+outstanding and kicks the worker again each time (`kickWorkerIfPending`). A
+check that fails its first attempt is retried within seconds while the staff
+member is still looking at the screen, rather than waiting for morning. On Pro,
+`*/5 * * * *` in [`vercel.json`](vercel.json) is a better fit.
 
 Uniforms are described in words, per cart, at `/admin`. That description is
 injected into the prompt verbatim, so how it is worded matters more than any
@@ -239,26 +253,36 @@ and the work resumes the next day.
 
 ### The score
 
-Each item carries a weight, set per uniform in `/admin`. The score is the
-weighted share of items the check could see, out of 100, and a uniform passes at
-or above its pass mark.
+The check grades **how each item is worn**, not merely whether it is there:
 
-The number is computed from the model's observations rather than asked of the
-model. A model asked for "a score out of 100" returns something that looks
-precise and is not reproducible — the same photo can come back 78 one minute and
-85 the next. Deriving it gives a score that is stable, explainable ("no cap,
-−25"), and adjustable without touching the prompt.
+| Grade | Meaning | Credit |
+| --- | --- | --- |
+| `g` | worn properly | full weight |
+| `p` | present but worn badly — cap pushed back, apron untied, shirt crumpled | half |
+| `n` | not worn | none |
+| `?` | the photo cannot settle it | bracketed, see below |
 
-**Three scores, not one.** The model answers `?` when a photo cannot settle an
-item, and a single average would bury that. `score_worst` counts every `?` as
-absent, `score_best` counts it as present, and the verdict only commits to pass
-or fail when both land on the same side of the pass mark. Anything else is
-`unclear` and goes to a person. The displayed score is the midpoint.
+Five items are graded — cap, apron, shirt, logo, and overall turnout — each
+carrying a weight set per uniform in `/admin`. The score is the weighted share
+earned, out of 100, and a uniform passes at or above its pass mark.
+
+Four grades, not a number, is deliberate. A model asked to rate an item 0-100
+returns something that looks precise and moves between runs on the same photo;
+asked whether something is worn properly, badly, or not at all, it is steady.
+More buckets would add noise rather than detail. The arithmetic then happens in
+`scoreObservation`, so the score is stable, explainable ("apron worn badly,
+half of 20"), and adjustable without touching the prompt.
+
+**Three scores, not one.** `score_worst` treats every `?` as not worn,
+`score_best` as worn properly, and the verdict only commits to pass or fail
+when both land on the same side of the pass mark. Anything else is `unclear`
+and goes to a person, which is what stops a dark photo from producing a
+confident accusation. The displayed score is the midpoint.
 
 Watch the interaction between weights and the pass mark: with the defaults
-(cap 25, apron 25, shirt 30, logo 20) and a mark of 70, someone missing only
-their cap scores 75 and still passes. Raise the mark past 80 if every item must
-be present.
+(cap 20, apron 20, shirt 25, logo 15, turnout 20) and a mark of 70, someone
+missing only their cap scores 80 and still passes. Raise the mark if every item
+must be present and properly worn.
 
 ## Deploying to Vercel
 
@@ -284,6 +308,15 @@ want to work (Production, Preview, Development):
 | `SUPABASE_PHOTOS_BUCKET` | `photos` |
 | `STORAGE_PROVIDER` | `supabase` or `cloudinary` |
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` / `_FOLDER` | Only when `STORAGE_PROVIDER=cloudinary` |
+| `GEMINI_API_KEY` | Server only. Without it the dress-check worker fails at runtime. |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` |
+| `GEMINI_MEDIA_RESOLUTION` | `MEDIA_RESOLUTION_HIGH`. Raise for small details, at roughly double the cost per step. |
+| `GEMINI_DAILY_CALL_CAP` | Ceiling on model calls per day |
+| `CRON_SECRET` | Vercel presents this to the cron route as a bearer token |
+
+`SUPABASE_ACCESS_TOKEN` is **not** in this list on purpose: it is a local
+migration credential that reaches every project on the account, and the
+deployed app never reads it.
 
 The `NEXT_PUBLIC_*` values are compiled into the client bundle, so they must be
 present *before* the build and a change to one needs a fresh deploy. The rest
@@ -369,6 +402,7 @@ as well as production.
 | [src/lib/attendance/dress-checks.ts](src/lib/attendance/dress-checks.ts) | Queue: enqueue, claim, judge, record spend |
 | [src/app/api/cron/dress-checks/route.ts](src/app/api/cron/dress-checks/route.ts) | Durable worker, bearer-token gated |
 | [supabase/dress-checks.sql](supabase/dress-checks.sql) | Atomic claim RPC and queue columns |
+| [supabase/scoring.sql](supabase/scoring.sql) | Weights, pass mark, reference-image table |
 | [scripts/db-migrate.mjs](scripts/db-migrate.mjs) | Applies .sql files via the Management API |
 
 ## Notes on versions
