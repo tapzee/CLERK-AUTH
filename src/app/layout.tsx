@@ -29,13 +29,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      suppressHydrationWarning
-    >
-      <body className="flex min-h-full flex-col bg-background text-foreground selection:bg-accent/20 selection:text-accent">
-        <ClerkProvider>
+    <ClerkProvider>
+      <html
+        lang="en"
+        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+        suppressHydrationWarning
+      >
+        <body className="flex min-h-full flex-col bg-background text-foreground selection:bg-accent/20 selection:text-accent">
           {/* Ambient lighting mesh */}
           <div className="ambient-mesh" aria-hidden="true" />
 
@@ -71,8 +71,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </p>
             </div>
           </footer>
-        </ClerkProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
