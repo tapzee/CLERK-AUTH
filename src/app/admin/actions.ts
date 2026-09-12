@@ -12,7 +12,7 @@ import {
   saveStaff,
   saveUniform,
 } from "@/lib/attendance/admin";
-import { ITEM_KEYS, type ItemKey } from "@/lib/gemini/dresscode";
+import { ITEM_KEYS, REFERENCE_KEYS, type ItemKey } from "@/lib/gemini/dresscode";
 import { StorageError } from "@/lib/storage";
 import type { StaffRole } from "@/lib/attendance/types";
 
@@ -218,10 +218,14 @@ export async function saveUniformAction(
   }
 }
 
-function itemKind(form: FormData): ItemKey {
+/**
+ * Reference photos only exist for the four garments. "Overall turnout" is
+ * scored too but has nothing to photograph, so it is rejected here.
+ */
+function referenceKind(form: FormData): ItemKey {
   const value = text(form, "kind");
-  if (!(ITEM_KEYS as readonly string[]).includes(value)) {
-    throw new StorageError("Unknown uniform item.", 400);
+  if (!(REFERENCE_KEYS as readonly string[]).includes(value)) {
+    throw new StorageError("That uniform item does not take a reference photo.", 400);
   }
   return value as ItemKey;
 }
@@ -242,7 +246,7 @@ export async function uploadReferenceAction(
       throw new StorageError("Pick an image to upload.", 400);
     }
 
-    await saveReferenceImage({ uniformProfileId, kind: itemKind(form), file });
+    await saveReferenceImage({ uniformProfileId, kind: referenceKind(form), file });
 
     revalidatePath("/admin");
     return { ok: true, error: null };
@@ -261,7 +265,7 @@ export async function deleteReferenceAction(
     const uniformProfileId = text(form, "uniformProfileId");
     if (!uniformProfileId) throw new StorageError("Unknown uniform.", 400);
 
-    await deleteReferenceImage(uniformProfileId, itemKind(form));
+    await deleteReferenceImage(uniformProfileId, referenceKind(form));
 
     revalidatePath("/admin");
     return { ok: true, error: null };
