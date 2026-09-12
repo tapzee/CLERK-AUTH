@@ -8,18 +8,20 @@ import {
   Upload,
   Trash2,
   Camera,
-  Sliders,
+  PencilLine,
   ShieldCheck,
   Store,
+  ScanEye,
 } from "lucide-react";
 
 import {
   deleteReferenceAction,
   saveUniformAction,
+  updateReferenceDescriptionAction,
   uploadReferenceAction,
 } from "@/app/manage/actions";
 import { IDLE, type ActionState } from "@/lib/manage/action-state";
-import type { UniformRecord } from "@/lib/manage/uniforms";
+import type { UniformReference, UniformRecord } from "@/lib/manage/uniforms";
 import { ITEM_KEYS, ITEM_LABELS, REFERENCE_KEYS, type ItemKey } from "@/lib/uniform/items";
 import { Card, EmptyState, Field, Pill, SectionHeading } from "@/components/ui/primitives";
 import { FormFeedback, SubmitButton } from "@/components/ui/form";
@@ -99,7 +101,7 @@ export function UniformManager({ uniforms }: { uniforms: UniformRecord[] }) {
                 </div>
 
                 <div className="mt-4 border-t border-border/60 pt-3">
-                  <p className="label mb-1.5">Scoring Weights</p>
+                  <p className="label mb-1.5">What Counts Toward The Score</p>
                   <ul className="flex flex-wrap gap-1.5">
                     {ITEM_KEYS.map((key) => (
                       <li key={key}>
@@ -112,6 +114,10 @@ export function UniformManager({ uniforms }: { uniforms: UniformRecord[] }) {
                       </li>
                     ))}
                   </ul>
+                  <p className="mt-1.5 text-[11px] text-muted text-pretty">
+                    Split equally between whichever items have a reference photo below,
+                    plus overall turnout. Upload a photo to bring an item in.
+                  </p>
                 </div>
 
                 <References uniform={uniform} />
@@ -172,32 +178,10 @@ function UniformForm({
         </Field>
 
         <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
-          <legend className="sr-only">Scoring Weights</legend>
-          <div className="flex items-center gap-2">
-            <Sliders className="h-4 w-4 text-accent" />
-            <p className="font-bold text-xs uppercase tracking-wider text-foreground">
-              Item Weights &amp; Thresholds
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-5">
-            {ITEM_KEYS.map((key) => (
-              <Field key={key} label={ITEM_LABELS[key]}>
-                <input
-                  name={`weight.${key}`}
-                  type="number"
-                  min={0}
-                  max={100}
-                  defaultValue={uniform?.weights[key] ?? 20}
-                  className="input font-mono"
-                />
-              </Field>
-            ))}
-          </div>
-
+          <legend className="sr-only">Passing threshold</legend>
           <Field
             label="Passing Score Threshold (out of 100)"
-            hint="Selfies scoring below this mark are rejected at the cart, requiring a retake."
+            hint="Selfies scoring below this mark are rejected at the cart, requiring a retake. There is nothing else to set here — an item counts, weighted equally with the rest, the moment you upload its reference photo below."
           >
             <input
               name="passScore"
@@ -229,16 +213,17 @@ function References({ uniform }: { uniform: UniformRecord }) {
 
   return (
     <div className="mt-4 border-t border-border/60 pt-3">
-      <p className="label mb-2">Reference Garment Photos</p>
+      <p className="label mb-0.5">Reference Garment Photos</p>
+      <p className="mb-2 text-[11px] text-muted text-pretty">
+        Every check reads the logo photo directly, for an exact match. Everything
+        else is written up in words the moment you upload it, and that wording is
+        what a check reads from then on — not the photo again.
+      </p>
 
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {REFERENCE_KEYS.map((kind) => (
           <li key={kind}>
-            <ReferenceSlot
-              uniformId={uniform.id}
-              kind={kind}
-              url={byKind.get(kind)?.url ?? null}
-            />
+            <ReferenceSlot uniformId={uniform.id} kind={kind} reference={byKind.get(kind)} />
           </li>
         ))}
       </ul>
@@ -249,17 +234,20 @@ function References({ uniform }: { uniform: UniformRecord }) {
 function ReferenceSlot({
   uniformId,
   kind,
-  url,
+  reference,
 }: {
   uniformId: string;
   kind: ItemKey;
-  url: string | null;
+  reference: UniformReference | undefined;
 }) {
   const [uploadState, upload] = useActionState<ActionState, FormData>(
     uploadReferenceAction,
     IDLE,
   );
   const [, remove] = useActionState<ActionState, FormData>(deleteReferenceAction, IDLE);
+
+  const url = reference?.url ?? null;
+  const isLogo = kind === "logo";
 
   return (
     <div className="space-y-2 rounded-xl border border-border/60 bg-surface/40 p-2.5">
@@ -288,7 +276,7 @@ function ReferenceSlot({
           className="w-full text-[10px] text-muted file:mr-1.5 file:rounded-md file:border-0 file:bg-surface-muted file:px-2 file:py-0.5 file:text-[10px] cursor-pointer"
         />
         <SubmitButton
-          pendingLabel="Saving…"
+          pendingLabel={isLogo ? "Saving…" : "Writing it up…"}
           variant="ghost"
           icon={<Upload className="h-3 w-3" />}
         >
@@ -298,6 +286,26 @@ function ReferenceSlot({
           <p className="text-[10px] text-danger text-pretty">{uploadState.error}</p>
         )}
       </form>
+
+      {isLogo ? (
+        url && (
+          <p className="flex items-start gap-1 text-[10px] text-muted text-pretty">
+            <ScanEye className="mt-0.5 h-3 w-3 shrink-0 text-accent" />
+            Always sent as this photo, for an exact match.
+          </p>
+        )
+      ) : (
+        // Keyed on the saved text: once a save lands and revalidation brings
+        // a new value down through props, this remounts fresh with its own
+        // `editing` state reset to false -- closing the editor on success
+        // without an effect or a ref read during render.
+        <DescriptionEditor
+          key={reference?.description ?? "none"}
+          uniformId={uniformId}
+          kind={kind}
+          description={reference?.description ?? null}
+        />
+      )}
 
       {url && (
         <form action={remove}>
@@ -313,5 +321,84 @@ function ReferenceSlot({
         </form>
       )}
     </div>
+  );
+}
+
+/**
+ * What the check actually reads for this item, and a way to fix it by hand.
+ *
+ * The wording is written once by the model when the photo is uploaded --
+ * shown here so an owner can see exactly what a check compares against, and
+ * correct it directly (a wrong colour, say) without re-uploading the photo
+ * just to trigger another AI guess.
+ */
+function DescriptionEditor({
+  uniformId,
+  kind,
+  description,
+}: {
+  uniformId: string;
+  kind: ItemKey;
+  description: string | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [state, formAction] = useActionState<ActionState, FormData>(
+    async (prev, formData) => {
+      const result = await updateReferenceDescriptionAction(prev, formData);
+      if (result.ok) setEditing(false);
+      return result;
+    },
+    IDLE,
+  );
+
+  if (!editing) {
+    return (
+      <div className="space-y-1">
+        {description ? (
+          <p className="text-[10px] text-muted text-pretty">&ldquo;{description}&rdquo;</p>
+        ) : (
+          <p className="text-[10px] text-muted/70 italic">
+            Written up automatically once a photo is uploaded.
+          </p>
+        )}
+        {description && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-accent hover:underline"
+          >
+            <PencilLine className="h-3 w-3" />
+            Fix the wording
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction} className="space-y-1.5">
+      <input type="hidden" name="uniformProfileId" value={uniformId} />
+      <input type="hidden" name="kind" value={kind} />
+      <textarea
+        name="description"
+        defaultValue={description ?? ""}
+        rows={2}
+        required
+        className="input resize-y text-[10px]"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SubmitButton pendingLabel="Saving…" variant="ghost">
+          Save wording
+        </SubmitButton>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="text-[10px] font-medium text-muted hover:text-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+      {state.error && <p className="text-[10px] text-danger text-pretty">{state.error}</p>}
+    </form>
   );
 }
