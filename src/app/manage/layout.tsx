@@ -42,10 +42,18 @@ export default async function ManageLayout({ children }: { children: React.React
             </Pill>
           </div>
         </div>
-        <Link href="/punch" className="btn btn-ghost shadow-sm text-xs sm:text-sm">
-          <Camera className="h-4 w-4 text-accent" />
-          <span>Punch Screen</span>
-        </Link>
+        {/*
+          An owner does not clock in through this system -- see the `WORKER`
+          permission split in rbac.ts -- so this link would only lead them to a
+          screen that refuses them. A manager still works a shift, so it stays
+          for them.
+        */}
+        {can(viewer.role, "attendance:punch") && (
+          <Link href="/punch" className="btn btn-ghost shadow-sm text-xs sm:text-sm">
+            <Camera className="h-4 w-4 text-accent" />
+            <span>Punch Screen</span>
+          </Link>
+        )}
       </header>
 
       {!hasUsableScope(viewer) && (
