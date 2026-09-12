@@ -1,29 +1,17 @@
-import { redirect } from "next/navigation";
-import { getViewerState, homePathFor } from "@/lib/auth/viewer";
+import { redirectToHome } from "@/lib/auth/viewer";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Dashboard",
-};
+export const metadata = { title: "Dashboard" };
 
 /**
- * Fallback route for Clerk or direct links that point to /dashboard.
- * Redirects the user directly to their respective workspace:
- * - Managers / Owners -> /manage
- * - Workers / Staff   -> /punch
- * - Signed out        -> /sign-in
+ * A landing path this app does not really have.
+ *
+ * `/dashboard` is what most Clerk projects are pointed at by default, so a
+ * dashboard setting nobody remembers changing — or an old bookmark — can still
+ * send somebody here. Rather than a 404 at the end of a successful sign-in,
+ * they are forwarded to whichever screen their role actually opens.
  */
 export default async function DashboardPage() {
-  const state = await getViewerState();
-
-  if (state.status === "signed-out") {
-    redirect("/sign-in");
-  }
-
-  if (state.status === "not-enrolled") {
-    redirect("/punch");
-  }
-
-  redirect(homePathFor(state.viewer));
+  await redirectToHome();
 }

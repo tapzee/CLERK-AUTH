@@ -9,20 +9,22 @@ import {
 } from "@/lib/photos";
 import { StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { businessDateIn } from "@/lib/time";
 import { loadUniformForCart } from "@/lib/uniform/profile";
-import type { CaptureMethod, LocationInput } from "@/lib/geo";
+import type { Role } from "@/lib/auth/rbac";
 
 import { checkGeofence } from "./geofence";
+import type { LocationInput } from "./location";
 import { judgeSelfie, rejectionMessage, type UniformResult } from "./uniform-check";
 import type {
   AttendanceEvent,
   AttendanceStatus,
+  CaptureMethod,
   PunchKind,
   ReviewStatus,
   UniformVerdict,
   Worker,
 } from "./types";
-import type { Role } from "@/lib/auth/rbac";
 
 /**
  * Recording attendance.
@@ -71,22 +73,6 @@ type EventRow = {
   grace_minutes: number | null;
   review_status: ReviewStatus;
 };
-
-/**
- * The calendar day a moment falls on in a given IANA zone.
- *
- * `en-CA` formats as YYYY-MM-DD, which is what the `business_date` column
- * holds. The database computes this value on insert; this is the read-side
- * counterpart used to ask for "today".
- */
-export function businessDateIn(timeZone: string, at: Date = new Date()): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone }).format(at);
-  } catch {
-    // An unknown zone in the carts table should not take the page down.
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(at);
-  }
-}
 
 function toWorker(row: WorkerRow): Worker {
   if (!row.carts) {
@@ -214,6 +200,8 @@ export class UniformRejected extends StorageError {
 
 type PunchInput = {
   clerkUserId: string;
+  /** Names the storage folder the photo lands in; see `storageFolderFor`. */
+  email: string | null;
   worker: Worker;
   kind: PunchKind;
   file: File;
@@ -287,6 +275,7 @@ export async function recordPunch(input: PunchInput): Promise<AttendanceEvent> {
 
   const photo = await storeVerifiedPhoto(image, {
     userId: input.clerkUserId,
+    ownerEmail: input.email,
     width: input.width,
     height: input.height,
     capturedAt: input.capturedAt,
@@ -402,6 +391,7 @@ async function recordRejectedAttempt(
   try {
     const photo = await storeVerifiedPhoto(image, {
       userId: input.clerkUserId,
+    ownerEmail: input.email,
       width: input.width,
       height: input.height,
       capturedAt: input.capturedAt,

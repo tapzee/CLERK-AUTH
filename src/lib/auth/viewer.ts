@@ -304,6 +304,22 @@ export function homePathFor(viewer: Viewer): string {
 }
 
 /**
+ * Sends whoever is asking to the screen they belong on, and never returns.
+ *
+ * The landing page and the legacy `/dashboard` and `/admin` paths all funnel
+ * through here, so a stale redirect configured in the Clerk dashboard, an old
+ * bookmark or a link in an email ends up somewhere real rather than on a 404.
+ */
+export async function redirectToHome(): Promise<never> {
+  const state = await getViewerState();
+
+  if (state.status === "signed-out") redirect("/sign-in");
+  // Signed in but nobody has enrolled them: /punch explains what to do.
+  if (state.status === "not-enrolled") redirect("/punch");
+  redirect(homePathFor(state.viewer));
+}
+
+/**
  * Sends an already-signed-in visitor off a signed-out page.
  *
  * Clerk refuses to render `<SignIn/>` to somebody who is already signed in --

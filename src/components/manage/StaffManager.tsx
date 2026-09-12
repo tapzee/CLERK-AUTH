@@ -100,7 +100,11 @@ export function StaffManager({
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                       <span className="inline-flex items-center gap-1">
                         <Store className="h-3 w-3 text-accent" />
-                        {member.cartId ? (cartName.get(member.cartId) ?? "Unknown cart") : "No cart"}
+                        {member.role === "admin"
+                          ? "All carts (Full access)"
+                          : member.cartId
+                          ? (cartName.get(member.cartId) ?? "Unknown cart")
+                          : "No cart"}
                       </span>
                       <span className="inline-flex items-center gap-1 font-mono">
                         <Clock className="h-3 w-3 text-accent" />
@@ -108,7 +112,9 @@ export function StaffManager({
                       </span>
                       <span className="inline-flex items-center gap-1 font-mono">
                         <Banknote className="h-3 w-3 text-accent" />
-                        {member.monthlySalary === null
+                        {member.role === "admin"
+                          ? "Owner account"
+                          : member.monthlySalary === null
                           ? "No salary set"
                           : `${formatMoney(member.monthlySalary)}/mo (${member.workingDaysPerMonth}d)`}
                       </span>
@@ -133,6 +139,7 @@ export function StaffManager({
 }
 
 function shiftLabel(member: StaffRecord): string {
+  if (member.role === "admin") return "All access";
   if (member.role === "manager") return "Flexible hours";
   if (!member.shiftStart) return "No shift";
   const end = member.shiftEnd ? `–${member.shiftEnd.slice(0, 5)}` : "";
@@ -257,118 +264,168 @@ function StaffForm({
           </dl>
         )}
 
-        {/* Shift Section */}
-        {selectedRole === "manager" ? (
+        {/* Shift & Pay Sections based on Role */}
+        {selectedRole === "admin" ? (
           <div className="rounded-xl border border-accent/20 bg-accent-soft/30 p-4">
             <div className="flex items-center gap-2 text-accent">
-              <Clock className="h-4 w-4" />
-              <p className="font-bold text-xs uppercase tracking-wider">Flexible Working Hours</p>
+              <Shield className="h-4 w-4" />
+              <p className="font-bold text-xs uppercase tracking-wider">Owner / System Administrator</p>
             </div>
             <p className="mt-1.5 text-xs text-muted">
-              Managers have flexible working hours. Fixed shift times, grace window, and late deductions do not apply.
-              Daily attendance punch is still required to calculate monthly payable days.
+              Owners have unrestricted administrative access to all carts, settings, roles, and payroll approvals.
+              Shift scheduling, punch attendance, and shift-based salary deductions do not apply to owner accounts.
             </p>
             <input type="hidden" name="shiftStart" value="" />
             <input type="hidden" name="shiftEnd" value="" />
             <input type="hidden" name="graceMinutes" value="0" />
+            <input type="hidden" name="monthlySalary" value="" />
+            <input type="hidden" name="workingDaysPerMonth" value="26" />
+            <input type="hidden" name="lateDeduction" value="0" />
           </div>
-        ) : (
-          <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
-            <legend className="sr-only">Shift Configuration</legend>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-accent" />
-              <p className="font-bold text-xs uppercase tracking-wider text-foreground">
-                Shift &amp; Grace Settings
+        ) : selectedRole === "manager" ? (
+          <>
+            <div className="rounded-xl border border-accent/20 bg-accent-soft/30 p-4">
+              <div className="flex items-center gap-2 text-accent">
+                <Clock className="h-4 w-4" />
+                <p className="font-bold text-xs uppercase tracking-wider">Flexible Working Hours</p>
+              </div>
+              <p className="mt-1.5 text-xs text-muted">
+                Managers have flexible working hours. Fixed shift times, grace window, and late deductions do not apply.
+                Daily attendance punch is still required to calculate monthly payable days.
               </p>
+              <input type="hidden" name="shiftStart" value="" />
+              <input type="hidden" name="shiftEnd" value="" />
+              <input type="hidden" name="graceMinutes" value="0" />
             </div>
 
-            <div className="grid gap-3.5 sm:grid-cols-3">
-              <Field label="Shift Start (Check In)">
-                <input
-                  name="shiftStart"
-                  type="time"
-                  defaultValue={member?.shiftStart?.slice(0, 5) ?? ""}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Shift End (Check Out)">
-                <input
-                  name="shiftEnd"
-                  type="time"
-                  defaultValue={member?.shiftEnd?.slice(0, 5) ?? ""}
-                  className="input font-mono"
-                />
-              </Field>
-              <Field label="Grace Window (Minutes)" hint="Arrivals within grace count as on time.">
-                <input
-                  name="graceMinutes"
-                  type="number"
-                  min={0}
-                  max={240}
-                  defaultValue={member?.graceMinutes ?? 30}
-                  required
-                  className="input font-mono"
-                />
-              </Field>
-            </div>
-          </fieldset>
+            <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+              <legend className="sr-only">Salary Configuration</legend>
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-accent" />
+                <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                  Compensation
+                </p>
+              </div>
+
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <Field label="Monthly Base Salary">
+                  <input
+                    name="monthlySalary"
+                    type="number"
+                    min={0}
+                    step="1"
+                    defaultValue={member?.monthlySalary ?? ""}
+                    placeholder="e.g. 25000"
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Working Days / Month" hint="26 days = 6-day work week.">
+                  <input
+                    name="workingDaysPerMonth"
+                    type="number"
+                    min={1}
+                    max={31}
+                    defaultValue={member?.workingDaysPerMonth ?? 26}
+                    required
+                    className="input font-mono"
+                  />
+                </Field>
+                <input type="hidden" name="lateDeduction" value="0" />
+              </div>
+              <p className="text-[11px] text-muted">
+                💡 Daily attendance is required. Missed days will prorate monthly salary based on working days. Lateness deduction does not apply to managers.
+              </p>
+            </fieldset>
+          </>
+        ) : (
+          <>
+            <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+              <legend className="sr-only">Shift Configuration</legend>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-accent" />
+                <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                  Shift &amp; Grace Settings
+                </p>
+              </div>
+
+              <div className="grid gap-3.5 sm:grid-cols-3">
+                <Field label="Shift Start (Check In)">
+                  <input
+                    name="shiftStart"
+                    type="time"
+                    defaultValue={member?.shiftStart?.slice(0, 5) ?? ""}
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Shift End (Check Out)">
+                  <input
+                    name="shiftEnd"
+                    type="time"
+                    defaultValue={member?.shiftEnd?.slice(0, 5) ?? ""}
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Grace Window (Minutes)" hint="Arrivals within grace count as on time.">
+                  <input
+                    name="graceMinutes"
+                    type="number"
+                    min={0}
+                    max={240}
+                    defaultValue={member?.graceMinutes ?? 30}
+                    required
+                    className="input font-mono"
+                  />
+                </Field>
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+              <legend className="sr-only">Salary Configuration</legend>
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-accent" />
+                <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                  Compensation &amp; Deductions
+                </p>
+              </div>
+
+              <div className="grid gap-3.5 sm:grid-cols-3">
+                <Field label="Monthly Base Salary">
+                  <input
+                    name="monthlySalary"
+                    type="number"
+                    min={0}
+                    step="1"
+                    defaultValue={member?.monthlySalary ?? ""}
+                    placeholder="e.g. 18000"
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Working Days / Month" hint="26 days = 6-day work week.">
+                  <input
+                    name="workingDaysPerMonth"
+                    type="number"
+                    min={1}
+                    max={31}
+                    defaultValue={member?.workingDaysPerMonth ?? 26}
+                    required
+                    className="input font-mono"
+                  />
+                </Field>
+                <Field label="Late Day Deduction" hint="0 = log lateness without docking pay.">
+                  <input
+                    name="lateDeduction"
+                    type="number"
+                    min={0}
+                    step="1"
+                    defaultValue={member?.lateDeduction ?? 0}
+                    required
+                    className="input font-mono"
+                  />
+                </Field>
+              </div>
+            </fieldset>
+          </>
         )}
-
-        {/* Pay Section */}
-        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
-          <legend className="sr-only">Salary Configuration</legend>
-          <div className="flex items-center gap-2">
-            <Banknote className="h-4 w-4 text-accent" />
-            <p className="font-bold text-xs uppercase tracking-wider text-foreground">
-              Compensation &amp; Deductions
-            </p>
-          </div>
-
-          <div className={`grid gap-3.5 ${selectedRole === "manager" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
-            <Field label="Monthly Base Salary">
-              <input
-                name="monthlySalary"
-                type="number"
-                min={0}
-                step="1"
-                defaultValue={member?.monthlySalary ?? ""}
-                placeholder="e.g. 18000"
-                className="input font-mono"
-              />
-            </Field>
-            <Field label="Working Days / Month" hint="26 days = 6-day work week.">
-              <input
-                name="workingDaysPerMonth"
-                type="number"
-                min={1}
-                max={31}
-                defaultValue={member?.workingDaysPerMonth ?? 26}
-                required
-                className="input font-mono"
-              />
-            </Field>
-            {selectedRole !== "manager" ? (
-              <Field label="Late Day Deduction" hint="0 = log lateness without docking pay.">
-                <input
-                  name="lateDeduction"
-                  type="number"
-                  min={0}
-                  step="1"
-                  defaultValue={member?.lateDeduction ?? 0}
-                  required
-                  className="input font-mono"
-                />
-              </Field>
-            ) : (
-              <input type="hidden" name="lateDeduction" value="0" />
-            )}
-          </div>
-          {selectedRole === "manager" && (
-            <p className="text-[11px] text-muted">
-              💡 Daily attendance is required. Missed days will prorate monthly salary based on working days. Lateness deduction does not apply to managers.
-            </p>
-          )}
-        </fieldset>
 
         <label className="flex items-center gap-2.5 text-xs sm:text-sm font-medium cursor-pointer">
           <input

@@ -206,6 +206,7 @@ export async function saveStaff(viewer: Viewer, input: StaffInput): Promise<void
   }
 
   const resolvedRole = resolveRole(viewer, input, existing);
+  const isOwner = resolvedRole === "admin";
   const isManager = resolvedRole === "manager";
 
   const row = {
@@ -213,14 +214,14 @@ export async function saveStaff(viewer: Viewer, input: StaffInput): Promise<void
     full_name: input.fullName,
     phone: input.phone,
     role: resolvedRole,
-    cart_id: input.cartId,
+    cart_id: isOwner ? (input.cartId || null) : input.cartId,
     active: input.active,
-    shift_start: isManager ? null : input.shiftStart,
-    shift_end: isManager ? null : input.shiftEnd,
-    grace_minutes: isManager ? 0 : input.graceMinutes,
-    monthly_salary: input.monthlySalary,
+    shift_start: (isOwner || isManager) ? null : input.shiftStart,
+    shift_end: (isOwner || isManager) ? null : input.shiftEnd,
+    grace_minutes: (isOwner || isManager) ? 0 : input.graceMinutes,
+    monthly_salary: isOwner ? null : input.monthlySalary,
     working_days_per_month: input.workingDaysPerMonth,
-    late_deduction: isManager ? 0 : input.lateDeduction,
+    late_deduction: (isOwner || isManager) ? 0 : input.lateDeduction,
   };
 
   const { error } = input.id

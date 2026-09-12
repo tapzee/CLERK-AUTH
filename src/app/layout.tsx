@@ -29,7 +29,23 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    /**
+     * Every Clerk flow lands on `/`, which routes by role -- console for a
+     * manager or owner, camera for everyone else.
+     *
+     * Set here rather than left to the environment because these also override
+     * the paths configured in the Clerk dashboard, which is otherwise free to
+     * send people to a `/dashboard` or `/admin` this app has never had.
+     */
+    <ClerkProvider
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      signInForceRedirectUrl="/"
+      signUpForceRedirectUrl="/"
+      signInFallbackRedirectUrl="/"
+      signUpFallbackRedirectUrl="/"
+      afterSignOutUrl="/"
+    >
       <html
         lang="en"
         className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}

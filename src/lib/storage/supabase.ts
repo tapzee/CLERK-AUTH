@@ -11,8 +11,9 @@ export const supabaseStorage: StorageProvider = {
   name: "supabase",
 
   async upload({ userId, pathPrefix, bytes, contentType, extension }: UploadInput) {
-    // Built on the server, either from the verified Clerk user id or from a
-    // prefix the server chose. Either way a client cannot pick where it lands.
+    // Built on the server, either from a prefix the server chose (the owner's
+    // verified email, or a company folder) or from the Clerk user id. Either
+    // way a client cannot pick where its file lands.
     const path = `${pathPrefix ?? userId}/${crypto.randomUUID()}.${extension}`;
 
     const { error } = await supabaseAdmin()

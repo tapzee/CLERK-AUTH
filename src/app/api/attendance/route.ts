@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 
 import { getViewerState } from "@/lib/auth/viewer";
 import { can } from "@/lib/auth/rbac";
-import { parseCaptureMethod, parseLocation } from "@/lib/geo";
+import { parseCaptureMethod, parseLocation } from "@/lib/attendance/location";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { StorageError } from "@/lib/storage";
 import {
@@ -106,6 +106,7 @@ export async function POST(request: Request) {
 
     const event = await recordPunch({
       clerkUserId: viewer.clerkUserId,
+      email: viewer.email,
       worker,
       kind,
       file,

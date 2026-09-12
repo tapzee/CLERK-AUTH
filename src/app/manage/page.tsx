@@ -6,6 +6,7 @@ import { requirePageAccess, type Viewer } from "@/lib/auth/viewer";
 import { getDaySheet, getReviewQueue, todayForViewer } from "@/lib/manage/attendance";
 import { getPayrollLines } from "@/lib/manage/payroll";
 import { formatMoney, monthKey } from "@/lib/payroll/calculate";
+import { formatBusinessDate } from "@/lib/time";
 import { Card, EmptyState, PageHeader, Pill, Stat } from "@/components/ui/primitives";
 
 export const metadata = { title: "Overview · Console" };
@@ -29,12 +30,7 @@ export default async function OverviewPage() {
       <PageHeader
         eyebrow="Dashboard"
         title="Today at a glance"
-        description={new Date(`${today}T00:00:00`).toLocaleDateString("en-GB", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })}
+        description={formatBusinessDate(today)}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -9,14 +9,16 @@ export type AllowedType = keyof typeof ALLOWED_TYPES;
 export type ProviderName = "supabase" | "cloudinary";
 
 export type UploadInput = {
-  /** Clerk user id. Providers must scope the stored object under it. */
+  /** Clerk user id. The folder of last resort when no prefix is given. */
   userId: string;
   /**
-   * Overrides the per-user folder.
+   * The folder to store under.
    *
-   * Company assets — a uniform reference photo, say — belong to the business
-   * rather than to whoever happened to upload them, so they live outside the
-   * per-user prefix. Still chosen on the server; a client can never supply it.
+   * Usually the owner's email address, so the bucket can be read by a human --
+   * see `storageFolderFor` in `lib/photos.ts`. Company assets (a uniform
+   * reference photo, say) belong to the business rather than to whoever
+   * uploaded them, and pass their own prefix instead. Always chosen on the
+   * server; a client can never supply it.
    */
   pathPrefix?: string;
   bytes: Uint8Array;

@@ -1,22 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * A boolean that survives a reload, remembered per browser rather than per
  * account -- e.g. "did this worker turn blink-capture on for the phone
  * propped up at this cart".
  *
- * Hydration-safe: renders false during SSR and initial hydration to match
- * server output, then reconciles to stored localStorage preference after mount.
+ * Hydration-safe by construction: `useSyncExternalStore` renders the server
+ * snapshot (false) on the server and through hydration, then swaps to what
+ * `localStorage` actually holds -- so the markup matches without a `mounted`
+ * flag of our own, and a change in another tab arrives through `storage`.
  */
 export function usePersistedBoolean(key: string): [boolean, (value: boolean) => void] {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const subscribe = useCallback((onChange: () => void) => {
     window.addEventListener("storage", onChange);
     return () => window.removeEventListener("storage", onChange);
@@ -32,8 +28,7 @@ export function usePersistedBoolean(key: string): [boolean, (value: boolean) => 
 
   const getServerSnapshot = useCallback(() => false, []);
 
-  const storedValue = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const value = mounted ? storedValue : false;
+  const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const set = useCallback(
     (next: boolean) => {

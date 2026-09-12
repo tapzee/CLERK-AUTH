@@ -1,6 +1,7 @@
 import "server-only";
 
-import type { CaptureMethod, LocationInput } from "@/lib/geo";
+import type { LocationInput } from "@/lib/attendance/location";
+import type { CaptureMethod } from "@/lib/attendance/types";
 import {
   ALLOWED_TYPES,
   activeProvider,
@@ -49,6 +50,37 @@ export type PhotoRow = {
   capture_method: CaptureMethod;
   purpose: PhotoPurpose;
 };
+
+/** Characters a storage key may not carry. Everything else becomes a dash. */
+const UNSAFE_IN_FOLDER = /[^a-z0-9._@+-]+/g;
+
+/**
+ * The folder one person's photos live under.
+ *
+ * The email address rather than the Clerk id, because `user_3Izpaacd9x...`
+ * tells nobody anything when they are looking at the bucket, and roles in this
+ * system are already keyed on the address -- so the folder matches the staff
+ * row it belongs to. The name is unusable for the same job: two people called
+ * Rahul would share a folder.
+ *
+ * Still chosen entirely on the server from a *verified* address, so a client
+ * cannot pick where its file lands. The `@` is required rather than assumed: it
+ * proves the value came from an address, which means this can never collide
+ * with the `user_...` fallback below or resolve to an empty path.
+ *
+ * Changing this only affects new uploads. Every `photos` row carries the path
+ * it was written to, so anything already in the bucket keeps resolving.
+ */
+export function storageFolderFor(userId: string, email?: string | null): string {
+  const folder = (email ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(UNSAFE_IN_FOLDER, "-")
+    .replace(/^[.-]+|[.-]+$/g, "")
+    .slice(0, 100);
+
+  return folder.includes("@") ? folder : userId;
+}
 
 /**
  * Trusting the browser's `File.type` alone would let a caller label anything as
@@ -113,6 +145,8 @@ export async function verifyImageUpload(file: File): Promise<VerifiedImage> {
 
 type PhotoMetadata = {
   userId: string;
+  /** The owner's verified address, which names their folder. See `storageFolderFor`. */
+  ownerEmail?: string | null;
   width?: number | null;
   height?: number | null;
   capturedAt?: string | null;
@@ -136,6 +170,7 @@ export async function storeVerifiedPhoto(
   { bytes, contentType }: VerifiedImage,
   {
     userId,
+    ownerEmail,
     width,
     height,
     capturedAt,
@@ -147,6 +182,7 @@ export async function storeVerifiedPhoto(
   const provider = activeProvider();
   const { path } = await provider.upload({
     userId,
+    pathPrefix: storageFolderFor(userId, ownerEmail),
     bytes,
     contentType,
     extension: ALLOWED_TYPES[contentType],

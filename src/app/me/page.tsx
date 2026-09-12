@@ -23,6 +23,7 @@ import {
   recentMonths,
 } from "@/lib/payroll/calculate";
 import { describeFaults } from "@/lib/uniform/items";
+import { formatDayLabel } from "@/lib/time";
 import {
   Card,
   EmptyState,
@@ -181,11 +182,7 @@ export default async function MyRecordPage({
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="font-semibold text-foreground">
-                      {new Date(punch.at).toLocaleDateString("en-GB", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      {formatDayLabel(punch.at)}
                     </span>
                   </div>
 

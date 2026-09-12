@@ -1,7 +1,14 @@
-import type { CaptureMethod } from "@/lib/capture";
+/**
+ * Reading a punch's reported position off the upload form.
+ *
+ * The rule that decides whether a position is close enough lives next door in
+ * `geofence.ts`, which the browser shares; this half only runs on the server,
+ * where the form arrives.
+ */
+
 import { StorageError } from "@/lib/storage";
 
-export type { CaptureMethod };
+import type { CaptureMethod } from "./types";
 
 export type LocationInput = {
   latitude: number | null;

@@ -19,6 +19,7 @@ import {
   ITEM_LABELS,
   type ItemGrade,
 } from "@/lib/uniform/items";
+import { formatBusinessDate } from "@/lib/time";
 import { Card, EmptyState, LocalTime, Pill, type Tone } from "@/components/ui/primitives";
 import { FormFeedback, SubmitButton } from "@/components/ui/form";
 
@@ -81,10 +82,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
               <p className="flex items-center gap-1.5 font-mono text-xs text-muted">
                 <Calendar className="h-3 w-3" />
                 <span>
-                  {new Date(`${item.businessDate}T00:00:00`).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                  })}
+                  {formatBusinessDate(item.businessDate, "short")}
                 </span>
                 {" · "}
                 <LocalTime at={item.at} />

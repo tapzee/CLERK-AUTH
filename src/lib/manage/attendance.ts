@@ -4,7 +4,7 @@ import type { Viewer } from "@/lib/auth/viewer";
 import { providerFor, StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { monthEnd } from "@/lib/payroll/calculate";
-import { businessDateIn } from "@/lib/attendance/service";
+import { businessDateIn, DEFAULT_TIMEZONE } from "@/lib/time";
 import type { ReviewStatus, UniformVerdict } from "@/lib/attendance/types";
 
 import { listStaff, trackableStaff, type StaffRecord } from "./staff";
@@ -38,7 +38,7 @@ export async function todayForViewer(viewer: Viewer): Promise<string> {
   const carts = data ?? [];
   const mine = viewer.cartId ? carts.find((cart) => cart.id === viewer.cartId) : undefined;
 
-  return businessDateIn(mine?.timezone ?? carts[0]?.timezone ?? "Asia/Kolkata");
+  return businessDateIn(mine?.timezone ?? carts[0]?.timezone ?? DEFAULT_TIMEZONE);
 }
 
 /** One person's day: when they arrived, when they left, and how it went. */

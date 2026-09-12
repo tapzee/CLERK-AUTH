@@ -10,6 +10,15 @@ import type { Role } from "@/lib/auth/rbac";
 /** A punch is either the start or the end of a shift. */
 export type PunchKind = "in" | "out";
 
+/** How the selfie was taken: by pressing the button, or by blinking. */
+export type CaptureMethod = "manual" | "blink";
+
+/** What to call each punch on a button or a badge. */
+export const PUNCH_LABEL: Record<PunchKind, string> = {
+  in: "Check in",
+  out: "Check out",
+};
+
 export type Cart = {
   id: string;
   name: string;

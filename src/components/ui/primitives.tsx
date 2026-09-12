@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { DEFAULT_TIMEZONE, formatLocalTime } from "@/lib/time";
+
 /**
  * The core design shapes every screen is built from.
  *
@@ -220,37 +222,15 @@ export function Stat({
 }
 
 /**
- * Formats an ISO date/time string into a human-readable local time (e.g. "9:30 AM").
- * Defaults to "Asia/Kolkata" to prevent server-side UTC rendering discrepancies.
- */
-export function formatLocalTime(
-  at: string | Date,
-  options?: { timeZone?: string; hour12?: boolean },
-): string {
-  const date = typeof at === "string" ? new Date(at) : at;
-  if (!date || isNaN(date.getTime())) return "—";
-
-  const timeZone = options?.timeZone || "Asia/Kolkata";
-  const hour12 = options?.hour12 ?? true;
-
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12,
-      timeZone,
-    }).format(date);
-  } catch {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-}
-
-/**
- * A time rendered in the cart's or Indian local timezone with 12-hour format.
+ * A punch time, rendered in the cart's zone rather than the viewer's.
+ *
+ * `suppressHydrationWarning` is belt-and-braces: `formatLocalTime` pins the
+ * zone so the server and the browser already agree, and the `title` keeps the
+ * exact ISO instant one hover away.
  */
 export function LocalTime({
   at,
-  timeZone = "Asia/Kolkata",
+  timeZone = DEFAULT_TIMEZONE,
 }: {
   at: string;
   timeZone?: string;
