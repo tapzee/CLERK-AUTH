@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 
-import { IDLE, saveStaffAction, type ActionState } from "@/app/admin/actions";
+import { saveStaffAction } from "@/app/admin/actions";
+import { IDLE, type ActionState } from "@/app/admin/action-state";
 import type { AdminCart, AdminStaff } from "@/lib/attendance/admin";
 
 type Editing = { member: AdminStaff | null } | null;
