@@ -5,25 +5,16 @@
  */
 
 /**
- * Longest edge of an uploaded evidence photo.
+ * Longest edge of an uploaded capture.
  *
- * A 1280x720 frame at quality 0.92 is around 300 KB; at 640px it is closer to
- * 60 KB. On a cart's mobile connection that is the difference between a punch
- * that feels instant and one that visibly hangs, and it is still far more
- * detail than a manager needs to see whether a cap is on.
+ * One photo serves both the manager's review and the uniform check. Gemini 3.x
+ * prices an image by the media resolution asked for, not by how many pixels
+ * were sent, so shrinking this saves upload bandwidth and not one token — while
+ * costing detail the check cannot get back. 1024px keeps a chest logo legible
+ * and still lands around 150 KB, which uploads comfortably on a cart's mobile
+ * connection and sits far under the 4 MB request ceiling.
  */
-export const EVIDENCE_MAX_EDGE = 640;
-
-/**
- * What Phase 2 will downscale to before sending a frame to the model.
- *
- * Gemini charges a flat 258 tokens for an image whose dimensions are both 384px
- * or under, and tiles anything larger at 258 tokens per 768x768 tile — so a
- * 640px frame costs about four times as much as a 384px one for the same
- * "is the cap on" verdict. Kept here next to the evidence size so the two
- * stay visibly distinct.
- */
-export const MODEL_MAX_EDGE = 384;
+export const CAPTURE_MAX_EDGE = 1024;
 
 export type Dimensions = { width: number; height: number };
 
@@ -42,13 +33,13 @@ export function fitWithin(source: Dimensions, maxEdge: number): Dimensions {
 /**
  * Grabs the current video frame as a JPEG, scaled down on the way out.
  *
- * Drawing straight into an already-small canvas avoids encoding the full-size
+ * Drawing straight into an already-sized canvas avoids encoding the full-size
  * frame first, so this is one resize rather than a capture followed by a
  * re-encode.
  */
 export async function captureFrame(
   video: HTMLVideoElement,
-  maxEdge = EVIDENCE_MAX_EDGE,
+  maxEdge = CAPTURE_MAX_EDGE,
   quality = 0.85,
 ): Promise<{ blob: Blob; width: number; height: number } | null> {
   if (!video.videoWidth || !video.videoHeight) return null;
@@ -71,4 +62,34 @@ export async function captureFrame(
   );
 
   return blob ? { blob, width, height } : null;
+}
+
+/** Reads a picked file into a JPEG scaled to fit, for admin reference uploads. */
+export async function shrinkImageFile(
+  file: File,
+  maxEdge = CAPTURE_MAX_EDGE,
+  quality = 0.85,
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const { width, height } = fitWithin(
+    { width: bitmap.width, height: bitmap.height },
+    maxEdge,
+  );
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    return file;
+  }
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", quality),
+  );
+  return blob ?? file;
 }

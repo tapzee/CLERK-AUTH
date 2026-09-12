@@ -82,14 +82,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const modelPhoto = form.get("modelPhoto");
-
     const event = await recordPunch({
       clerkUserId: userId,
       staff,
       kind,
       file,
-      modelFile: modelPhoto instanceof File ? modelPhoto : null,
       location: parseLocation(form),
       capturedAt: typeof form.get("capturedAt") === "string"
         ? String(form.get("capturedAt"))

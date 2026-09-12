@@ -1,6 +1,14 @@
 import "server-only";
 
-import { checkUniforms, verdictFor, type CheckSubject, type UniformSpec } from "@/lib/gemini/dresscode";
+import {
+  checkUniforms,
+  ITEM_KEYS,
+  scoreObservation,
+  type CheckSubject,
+  type ItemKey,
+  type ReferenceImage,
+  type UniformSpec,
+} from "@/lib/gemini/dresscode";
 import { serverEnv } from "@/lib/env";
 import { providerFor, StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -8,9 +16,18 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 /** How many photos ride in one model call. */
 const BATCH_SIZE = 8;
 
+const DEFAULT_WEIGHTS: Record<ItemKey, number> = {
+  cap: 25,
+  apron: 25,
+  shirt: 30,
+  logo: 20,
+};
+
 const DEFAULT_UNIFORM: UniformSpec = {
   promptNotes: null,
-  requiredItems: { cap: true, apron: true, shirt: true },
+  weights: DEFAULT_WEIGHTS,
+  passScore: 70,
+  references: [],
 };
 
 export type DressCheckSummary = {
@@ -18,6 +35,7 @@ export type DressCheckSummary = {
   verdict: "pass" | "fail" | "unclear" | null;
   items: Record<string, string> | null;
   reason: string | null;
+  score: number | null;
 };
 
 /**
@@ -30,15 +48,15 @@ export type DressCheckSummary = {
 export async function enqueueDressCheck(input: {
   attendanceEventId: string;
   photoId: string;
-  modelPhotoId: string | null;
 }): Promise<void> {
   const { error } = await supabaseAdmin().from("dress_checks").insert({
     attendance_event_id: input.attendanceEventId,
     photo_id: input.photoId,
-    model_photo_id: input.modelPhotoId,
-    // Without a downscaled copy there is nothing cheap to send, so the row is
-    // recorded as skipped rather than silently costing four times as much.
-    status: input.modelPhotoId ? "queued" : "skipped",
+    // One photo serves both roles. Gemini 3.x prices an image by media
+    // resolution rather than by its pixel size, so a second, smaller copy would
+    // save upload bandwidth and not one token.
+    model_photo_id: input.photoId,
+    status: "queued",
   });
 
   if (error) {
@@ -53,7 +71,7 @@ export async function getDressCheck(
 ): Promise<DressCheckSummary | null> {
   const { data, error } = await supabaseAdmin()
     .from("dress_checks")
-    .select("status, verdict, items, reason")
+    .select("status, verdict, items, reason, score")
     .eq("attendance_event_id", attendanceEventId)
     .maybeSingle<DressCheckSummary>();
 
@@ -85,7 +103,12 @@ async function callsToday(): Promise<number> {
   return count ?? 0;
 }
 
-type ClaimedRow = { id: string; attendance_event_id: string; model_photo_id: string | null };
+type ClaimedRow = {
+  id: string;
+  attendance_event_id: string;
+  photo_id: string | null;
+  model_photo_id: string | null;
+};
 
 type Job = {
   id: string;
@@ -96,14 +119,11 @@ type Job = {
 };
 
 /**
- * Pulls the photo bytes through a signed URL rather than a provider-specific
+ * Pulls photo bytes through a signed URL rather than a provider-specific
  * download call, so this works the same whether the bytes live in Supabase
  * Storage or Cloudinary.
  */
-async function loadBytes(
-  provider: string,
-  path: string,
-): Promise<Uint8Array | null> {
+async function loadBytes(provider: string, path: string): Promise<Uint8Array | null> {
   const urls = await providerFor(provider).signedUrls([path]);
   const url = urls.get(path);
   if (!url) return null;
@@ -113,11 +133,89 @@ async function loadBytes(
   return new Uint8Array(await response.arrayBuffer());
 }
 
+function normaliseWeights(raw: unknown): Record<ItemKey, number> {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const weights = {} as Record<ItemKey, number>;
+
+  for (const key of ITEM_KEYS) {
+    const value = Number(source[key]);
+    weights[key] = Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  // An all-zero set would make every check trivially pass, which is never what
+  // an admin meant — fall back rather than silently rubber-stamp everyone.
+  return ITEM_KEYS.some((key) => weights[key] > 0) ? weights : DEFAULT_WEIGHTS;
+}
+
+/** Loads each uniform once, with its reference photos, for the whole batch. */
+async function loadUniforms(profileIds: string[]): Promise<Map<string, UniformSpec>> {
+  const byId = new Map<string, UniformSpec>();
+  if (profileIds.length === 0) return byId;
+
+  const supabase = supabaseAdmin();
+  const [profiles, references] = await Promise.all([
+    supabase
+      .from("uniform_profiles")
+      .select("id, prompt_notes, score_weights, pass_score")
+      .in("id", profileIds),
+    supabase
+      .from("uniform_reference_images")
+      .select("uniform_profile_id, kind, provider, storage_path, content_type")
+      .in("uniform_profile_id", profileIds),
+  ]);
+
+  type ProfileRow = {
+    id: string;
+    prompt_notes: string | null;
+    score_weights: unknown;
+    pass_score: number | null;
+  };
+  type ReferenceRow = {
+    uniform_profile_id: string;
+    kind: ItemKey;
+    provider: string;
+    storage_path: string;
+    content_type: string;
+  };
+
+  for (const row of ((profiles.data ?? []) as ProfileRow[])) {
+    byId.set(row.id, {
+      promptNotes: row.prompt_notes,
+      weights: normaliseWeights(row.score_weights),
+      passScore: row.pass_score ?? 70,
+      references: [],
+    });
+  }
+
+  // Fetched in parallel; a uniform has at most four of these and they are
+  // shared by every staff member in the batch.
+  await Promise.all(
+    ((references.data ?? []) as ReferenceRow[]).map(async (row) => {
+      const spec = byId.get(row.uniform_profile_id);
+      if (!spec) return;
+
+      const bytes = await loadBytes(row.provider, row.storage_path);
+      if (!bytes) return;
+
+      const reference: ReferenceImage = {
+        kind: row.kind,
+        bytes,
+        mimeType: row.content_type,
+      };
+      spec.references.push(reference);
+    }),
+  );
+
+  return byId;
+}
+
 /** Gathers everything a claimed row needs before it can be judged. */
 async function hydrate(rows: ClaimedRow[]): Promise<Job[]> {
   const supabase = supabaseAdmin();
 
-  const photoIds = rows.map((row) => row.model_photo_id).filter((id): id is string => !!id);
+  const photoIds = rows
+    .map((row) => row.model_photo_id ?? row.photo_id)
+    .filter((id): id is string => !!id);
   const eventIds = rows.map((row) => row.attendance_event_id);
 
   const [photos, events] = await Promise.all([
@@ -148,32 +246,14 @@ async function hydrate(rows: ClaimedRow[]): Promise<Job[]> {
     }),
   );
 
-  // One fetch for every distinct uniform in the batch, not one per check.
-  const profileIds = [...new Set([...profileByEvent.values()].filter((id): id is string => !!id))];
-  const uniformById = new Map<string, UniformSpec>();
-
-  if (profileIds.length > 0) {
-    const { data } = await supabase
-      .from("uniform_profiles")
-      .select("id, prompt_notes, required_items")
-      .in("id", profileIds);
-
-    type ProfileRow = {
-      id: string;
-      prompt_notes: string | null;
-      required_items: Record<string, boolean> | null;
-    };
-    for (const row of (data ?? []) as ProfileRow[]) {
-      uniformById.set(row.id, {
-        promptNotes: row.prompt_notes,
-        requiredItems: row.required_items ?? DEFAULT_UNIFORM.requiredItems,
-      });
-    }
-  }
+  const uniformById = await loadUniforms([
+    ...new Set([...profileByEvent.values()].filter((id): id is string => !!id)),
+  ]);
 
   const jobs: Job[] = [];
   for (const row of rows) {
-    const photo = row.model_photo_id ? photoById.get(row.model_photo_id) : undefined;
+    const photoId = row.model_photo_id ?? row.photo_id;
+    const photo = photoId ? photoById.get(photoId) : undefined;
     if (!photo) continue;
 
     const bytes = await loadBytes(photo.provider, photo.storage_path);
@@ -215,9 +295,7 @@ export type WorkerReport = {
  * Called both by the cron schedule and, for latency, by `after()` on the punch
  * that created the row. Claiming is atomic, so the two racing is harmless.
  */
-export async function runDressCheckBatch(
-  batchSize = BATCH_SIZE,
-): Promise<WorkerReport> {
+export async function runDressCheckBatch(batchSize = BATCH_SIZE): Promise<WorkerReport> {
   const empty: WorkerReport = {
     claimed: 0, judged: 0, failed: 0, calls: 0, inputTokens: 0, outputTokens: 0,
   };
@@ -249,7 +327,7 @@ export async function runDressCheckBatch(
   const report: WorkerReport = { ...empty, claimed: rows.length, failed: unusable.length };
 
   // A batch can span carts with different uniforms; each group is its own call
-  // so every photo is judged against the right description.
+  // so every photo is judged against the right description and references.
   const groups = new Map<string, Job[]>();
   for (const job of jobs) {
     groups.set(job.uniformKey, [...(groups.get(job.uniformKey) ?? []), job]);
@@ -278,14 +356,17 @@ export async function runDressCheckBatch(
           continue;
         }
 
-        const { verdict, items } = verdictFor(observation, job.uniform.requiredItems);
+        const scored = scoreObservation(observation, job.uniform);
         const { error: writeError } = await supabaseAdmin()
           .from("dress_checks")
           .update({
             status: "done",
-            verdict,
-            items: { ...items, at_cart: observation.atCart },
-            reason: verdict === "pass" ? null : observation.why,
+            verdict: scored.verdict,
+            score: scored.score,
+            score_best: scored.best,
+            score_worst: scored.worst,
+            items: { ...observation.items, at_cart: observation.atCart },
+            reason: scored.verdict === "pass" ? null : observation.why,
             model: result.model,
             // Attributed evenly: the call is shared, and a per-photo split is
             // close enough for spend tracking.

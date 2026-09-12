@@ -149,7 +149,7 @@ async function todaysEvents(staff: Staff): Promise<AttendanceEvent[]> {
   // costs two queries regardless of how many times someone punched today.
   const { data: checks } = await supabaseAdmin()
     .from("dress_checks")
-    .select("attendance_event_id, status, verdict, items, reason")
+    .select("attendance_event_id, status, verdict, items, reason, score")
     .in("attendance_event_id", events.map((event) => event.id));
 
   type CheckRow = { attendance_event_id: string } & DressCheck;
@@ -177,16 +177,6 @@ type PunchInput = {
   staff: Staff;
   kind: PunchKind;
   file: File;
-  /**
-   * A 384px copy of the same frame, for the uniform check.
-   *
-   * Sent by the browser rather than derived here: Gemini bills a flat rate for
-   * an image whose sides are both 384px or under and tiles anything larger, so
-   * the evidence photo would cost about four times as much to judge. Resizing
-   * server-side would mean an image library in the bundle for no benefit, since
-   * the browser already has the frame in a canvas.
-   */
-  modelFile: File | null;
   location: LocationInput;
   capturedAt: string | null;
   width: number | null;
@@ -210,7 +200,6 @@ export async function recordPunch({
   staff,
   kind,
   file,
-  modelFile,
   location,
   capturedAt,
   width,
@@ -291,29 +280,7 @@ export async function recordPunch({
   // call and tells the business nothing it did not learn at check-in, so this
   // halves the call volume for free.
   if (kind === "in") {
-    // Stored second and best-effort: a punch is already recorded by this point
-    // and must not be undone because the smaller copy failed to upload.
-    let modelPhotoId: string | null = null;
-    if (modelFile) {
-      try {
-        const modelPhoto = await storePhoto({
-          userId: clerkUserId,
-          file: modelFile,
-          capturedAt,
-          location,
-          purpose: "attendance",
-        });
-        modelPhotoId = modelPhoto.id;
-      } catch (uploadError) {
-        console.error("[attendance] model copy upload failed", uploadError);
-      }
-    }
-
-    await enqueueDressCheck({
-      attendanceEventId: data.id,
-      photoId: photo.id,
-      modelPhotoId,
-    });
+    await enqueueDressCheck({ attendanceEventId: data.id, photoId: photo.id });
   }
 
   return toEvent(data);

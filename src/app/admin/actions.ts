@@ -5,12 +5,14 @@ import { revalidatePath } from "next/cache";
 
 import {
   claimFirstAdmin,
+  deleteReferenceImage,
   requireAdmin,
   saveCart,
+  saveReferenceImage,
   saveStaff,
   saveUniform,
-  UNIFORM_ITEMS,
 } from "@/lib/attendance/admin";
+import { ITEM_KEYS, type ItemKey } from "@/lib/gemini/dresscode";
 import { StorageError } from "@/lib/storage";
 import type { StaffRole } from "@/lib/attendance/types";
 
@@ -187,18 +189,79 @@ export async function saveUniformAction(
     const name = text(form, "name");
     if (!name) throw new StorageError("The uniform needs a name.", 400);
 
-    // Checkbox semantics: an unticked box sends nothing, so absence means the
-    // item is reported but never fails a check.
-    const requiredItems = Object.fromEntries(
-      UNIFORM_ITEMS.map((item) => [item, form.get(`required.${item}`) === "on"]),
-    );
+    const weights = {} as Record<ItemKey, number>;
+    for (const item of ITEM_KEYS) {
+      const value = Number(text(form, `weight.${item}`));
+      weights[item] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+    }
+    if (ITEM_KEYS.every((item) => weights[item] === 0)) {
+      throw new StorageError("At least one item needs a weight above zero.", 400);
+    }
+
+    const passScore = Math.round(number(form, "passScore"));
+    if (passScore < 0 || passScore > 100) {
+      throw new StorageError("The pass mark must be between 0 and 100.", 400);
+    }
 
     await saveUniform({
       id: optionalText(form, "id") ?? undefined,
       name,
       promptNotes: optionalText(form, "promptNotes"),
-      requiredItems,
+      weights,
+      passScore,
     });
+
+    revalidatePath("/admin");
+    return { ok: true, error: null };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+function itemKind(form: FormData): ItemKey {
+  const value = text(form, "kind");
+  if (!(ITEM_KEYS as readonly string[]).includes(value)) {
+    throw new StorageError("Unknown uniform item.", 400);
+  }
+  return value as ItemKey;
+}
+
+/** Uploads or replaces one reference photo for a uniform item. */
+export async function uploadReferenceAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await authorize();
+
+    const uniformProfileId = text(form, "uniformProfileId");
+    if (!uniformProfileId) throw new StorageError("Save the uniform first.", 400);
+
+    const file = form.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      throw new StorageError("Pick an image to upload.", 400);
+    }
+
+    await saveReferenceImage({ uniformProfileId, kind: itemKind(form), file });
+
+    revalidatePath("/admin");
+    return { ok: true, error: null };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteReferenceAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await authorize();
+
+    const uniformProfileId = text(form, "uniformProfileId");
+    if (!uniformProfileId) throw new StorageError("Unknown uniform.", 400);
+
+    await deleteReferenceImage(uniformProfileId, itemKind(form));
 
     revalidatePath("/admin");
     return { ok: true, error: null };

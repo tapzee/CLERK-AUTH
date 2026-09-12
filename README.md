@@ -91,7 +91,7 @@ browser                          Next.js server
 watch position  ──▶ distance to cart shown live
    │  (button stays disabled until inside the fence)
    ▼
-capture frame, scaled to 640px
+capture frame, scaled to 1024px
    │
    ▼
 POST /api/attendance  ─────────▶ auth() verifies Clerk session
@@ -178,7 +178,8 @@ Gemini (one call per batch of 8) ──▶ verdict written to dress_checks
 
 The staff screen polls while a verdict is pending and stops once it settles.
 
-**Setup.** Run [`supabase/dress-checks.sql`](supabase/dress-checks.sql), then
+**Setup.** Run [`supabase/dress-checks.sql`](supabase/dress-checks.sql) and
+[`supabase/scoring.sql`](supabase/scoring.sql), then
 set `GEMINI_API_KEY` and `CRON_SECRET` (see `.env.local.example`). On Vercel,
 add both under Settings → Environment Variables; the schedule itself comes from
 [`vercel.json`](vercel.json) and Vercel presents `CRON_SECRET` as a bearer
@@ -189,42 +190,75 @@ Uniforms are described in words, per cart, at `/admin`. That description is
 injected into the prompt verbatim, so how it is worded matters more than any
 other setting here.
 
-### Why it costs almost nothing
+### Reference photos and the logo
 
-Five choices, in rough order of how much they save:
+Words describe a navy polo well enough. They cannot describe *your* logo, so
+`/admin` takes one photo per item — cap, apron, shirt, logo — and those are sent
+ahead of the staff photos on every call. The logo one is the point: it is the
+only way the check can tell your print from any other.
+
+They are stored under a `uniforms/<profile>` prefix rather than in the
+uploader's folder, since they belong to the business, and they are shrunk in the
+browser before upload because a phone photo would otherwise exceed the request
+limit.
+
+### Resolution is the accuracy dial, not the image size
+
+Gemini 3.x prices an image by the **media resolution** asked for, not by how
+many pixels were sent. Measured on this project's own captures:
+
+| `GEMINI_MEDIA_RESOLUTION` | Tokens per image | Cost/month, 200 staff |
+| --- | --- | --- |
+| `MEDIA_RESOLUTION_LOW` | ~266 | — |
+| `MEDIA_RESOLUTION_MEDIUM` | ~540 | ₹179 |
+| `MEDIA_RESOLUTION_HIGH` *(default)* | ~1064 | ₹251 |
+| `MEDIA_RESOLUTION_ULTRA_HIGH` | ~2160 | ₹402 |
+
+Two consequences worth holding on to:
+
+- **Shrinking the upload saves bandwidth and not one token.** Captures are
+  1024px (`CAPTURE_MAX_EDGE`) so the detail the check needs is actually present;
+  a single photo then serves both the manager's review and the model.
+- **If a logo is being missed, raise the resolution, not the image size.** That
+  is the only dial that changes either the answer or the bill.
+
+### Why it still costs little
 
 - **`thinkingLevel: "minimal"`.** Thinking tokens bill at the *output* rate and
   "is a cap present" needs no reasoning. This is also why the default model is
   Flash-Lite: `gemini-3.8-flash` cannot go below `"low"`.
-- **384px images.** Gemini charges a flat 258 tokens when both sides are ≤384px
-  and tiles anything larger. The 640px evidence photo measures 1,032 tokens for
-  the identical verdict, so the browser sends a second, smaller copy purely for
-  the model — see `MODEL_MAX_EDGE` in [src/lib/image.ts](src/lib/image.ts).
-- **Batches of 8.** One call, one shared instruction block, and eight times the
-  headroom against the requests-per-minute ceiling during the morning rush.
+- **Batches of 8.** One call, one shared instruction block, one set of reference
+  photos, and eight times the headroom against the requests-per-minute ceiling.
 - **Check-outs are never checked.** Re-verifying a uniform at the end of a shift
-  costs a call and tells you nothing new. This halves the volume outright.
-- **Tiny output.** Single-character enums, and a written reason only when
-  something actually failed.
+  costs a call and tells you nothing new. Halves the volume outright.
+- **Tiny output.** Single-character enums, and a written reason only on a fail.
 
 A daily cap (`GEMINI_DAILY_CALL_CAP`) backstops all of it: past the ceiling,
 checks stay queued rather than being dropped, so a runaway loop costs nothing
 and the work resumes the next day.
 
-### What the model is and isn't asked
+### The score
 
-It reports **observations** — cap, apron, shirt, and whether the background
-looks like a food cart — each as `y`, `n`, or `?`. Which of those are mandatory
-is applied afterwards in `verdictFor`, from the cart's uniform profile, so
-changing policy never means rewriting the prompt.
+Each item carries a weight, set per uniform in `/admin`. The score is the
+weighted share of items the check could see, out of 100, and a uniform passes at
+or above its pass mark.
 
-`?` is a first-class answer and the prompt encourages it. A forced yes/no on a
-dark or distant photo produces a confident guess, and a wrong "no" accuses
-someone who did nothing wrong — an unclear verdict goes to a person instead.
+The number is computed from the model's observations rather than asked of the
+model. A model asked for "a score out of 100" returns something that looks
+precise and is not reproducible — the same photo can come back 78 one minute and
+85 the next. Deriving it gives a score that is stable, explainable ("no cap,
+−25"), and adjustable without touching the prompt.
 
-Logo authenticity is deliberately **not** checked. At 384px a cap badge is a
-handful of pixels; asking would yield a confident answer that is not grounded in
-anything the image actually contains.
+**Three scores, not one.** The model answers `?` when a photo cannot settle an
+item, and a single average would bury that. `score_worst` counts every `?` as
+absent, `score_best` counts it as present, and the verdict only commits to pass
+or fail when both land on the same side of the pass mark. Anything else is
+`unclear` and goes to a person. The displayed score is the midpoint.
+
+Watch the interaction between weights and the pass mark: with the defaults
+(cap 25, apron 25, shirt 30, logo 20) and a mark of 70, someone missing only
+their cap scores 75 and still passes. Raise the mark past 80 if every item must
+be present.
 
 ## Deploying to Vercel
 
@@ -325,7 +359,7 @@ as well as production.
 | [src/app/api/attendance/route.ts](src/app/api/attendance/route.ts) | `GET` today's status, `POST` a punch |
 | [src/lib/attendance/service.ts](src/lib/attendance/service.ts) | Staff lookup, session rules, punch recording |
 | [src/lib/attendance/geofence.ts](src/lib/attendance/geofence.ts) | Haversine distance, shared by both sides |
-| [src/lib/image.ts](src/lib/image.ts) | Capture sizing — evidence at 640px, model at 384px |
+| [src/lib/image.ts](src/lib/image.ts) | Capture sizing and browser-side shrinking |
 | [src/app/admin/page.tsx](src/app/admin/page.tsx) | Cart and staff management, role-gated |
 | [src/app/admin/actions.ts](src/app/admin/actions.ts) | Server Actions; each re-checks the role itself |
 | [src/components/admin/](src/components/admin/) | Cart editor with "use my location", staff editor |

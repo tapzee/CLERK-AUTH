@@ -80,6 +80,25 @@ export const serverEnv = {
     return process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
   },
   /**
+   * How much of each staff photo the model is given to look at.
+   *
+   * Measured on this project's own captures: LOW ≈ 266 tokens, MEDIUM ≈ 540,
+   * HIGH ≈ 1064, ULTRA_HIGH ≈ 2160. In Gemini 3.x this, not the image's pixel
+   * dimensions, is what an image costs — so this is the dial to turn when a
+   * small detail like a chest logo is being missed, and the only one that
+   * changes the bill.
+   */
+  get geminiMediaResolution() {
+    const allowed = [
+      "MEDIA_RESOLUTION_LOW",
+      "MEDIA_RESOLUTION_MEDIUM",
+      "MEDIA_RESOLUTION_HIGH",
+      "MEDIA_RESOLUTION_ULTRA_HIGH",
+    ];
+    const value = process.env.GEMINI_MEDIA_RESOLUTION;
+    return value && allowed.includes(value) ? value : "MEDIA_RESOLUTION_HIGH";
+  },
+  /**
    * Hard ceiling on model calls per day, across the whole deployment.
    *
    * A retry loop or a runaway cron cannot cost more than this. Checks beyond it

@@ -1,6 +1,8 @@
 import "server-only";
 
-import { StorageError } from "@/lib/storage";
+import { ITEM_KEYS, type ItemKey } from "@/lib/gemini/dresscode";
+import { MAX_UPLOAD_BYTES, sniffImageType } from "@/lib/photos";
+import { activeProvider, ALLOWED_TYPES, providerFor, StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 import type { StaffRole } from "./types";
@@ -271,26 +273,52 @@ export async function saveStaff(input: StaffInput): Promise<void> {
   }
 }
 
+export type AdminReference = {
+  kind: ItemKey;
+  url: string | null;
+  byteSize: number;
+};
+
 export type AdminUniform = {
   id: string;
   name: string;
   promptNotes: string | null;
-  requiredItems: Record<string, boolean>;
+  weights: Record<ItemKey, number>;
+  passScore: number;
+  references: AdminReference[];
   cartCount: number;
 };
 
-/** The items the check reports on. Anything else in the jsonb is ignored. */
-export const UNIFORM_ITEMS = ["cap", "apron", "shirt"] as const;
+const DEFAULT_WEIGHTS: Record<ItemKey, number> = {
+  cap: 25,
+  apron: 25,
+  shirt: 30,
+  logo: 20,
+};
+
+function readWeights(raw: unknown): Record<ItemKey, number> {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const weights = {} as Record<ItemKey, number>;
+
+  for (const key of ITEM_KEYS) {
+    const value = Number(source[key]);
+    weights[key] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+  }
+  return ITEM_KEYS.some((key) => weights[key] > 0) ? weights : { ...DEFAULT_WEIGHTS };
+}
 
 export async function listUniforms(): Promise<AdminUniform[]> {
   const supabase = supabaseAdmin();
 
-  const [profiles, carts] = await Promise.all([
+  const [profiles, carts, references] = await Promise.all([
     supabase
       .from("uniform_profiles")
-      .select("id, name, prompt_notes, required_items")
+      .select("id, name, prompt_notes, score_weights, pass_score")
       .order("name"),
     supabase.from("carts").select("uniform_profile_id"),
+    supabase
+      .from("uniform_reference_images")
+      .select("uniform_profile_id, kind, provider, storage_path, byte_size"),
   ]);
 
   if (profiles.error) {
@@ -304,19 +332,50 @@ export async function listUniforms(): Promise<AdminUniform[]> {
     }
   }
 
-  type Row = {
+  type ReferenceRow = {
+    uniform_profile_id: string;
+    kind: ItemKey;
+    provider: string;
+    storage_path: string;
+    byte_size: number;
+  };
+  const referenceRows = (references.data ?? []) as ReferenceRow[];
+
+  // Thumbnails are signed per provider in one round trip rather than per image.
+  const byProvider = new Map<string, string[]>();
+  for (const row of referenceRows) {
+    byProvider.set(row.provider, [...(byProvider.get(row.provider) ?? []), row.storage_path]);
+  }
+  const urls = new Map<string, string | null>();
+  await Promise.all(
+    [...byProvider].map(async ([provider, paths]) => {
+      const resolved = await providerFor(provider).signedUrls(paths);
+      for (const [path, url] of resolved) urls.set(`${provider}:${path}`, url);
+    }),
+  );
+
+  type ProfileRow = {
     id: string;
     name: string;
     prompt_notes: string | null;
-    required_items: Record<string, boolean> | null;
+    score_weights: unknown;
+    pass_score: number | null;
   };
 
-  return ((profiles.data ?? []) as Row[]).map((row) => ({
+  return ((profiles.data ?? []) as ProfileRow[]).map((row) => ({
     id: row.id,
     name: row.name,
     promptNotes: row.prompt_notes,
-    requiredItems: row.required_items ?? {},
+    weights: readWeights(row.score_weights),
+    passScore: row.pass_score ?? 70,
     cartCount: counts.get(row.id) ?? 0,
+    references: referenceRows
+      .filter((reference) => reference.uniform_profile_id === row.id)
+      .map((reference) => ({
+        kind: reference.kind,
+        url: urls.get(`${reference.provider}:${reference.storage_path}`) ?? null,
+        byteSize: reference.byte_size,
+      })),
   }));
 }
 
@@ -324,7 +383,8 @@ export type UniformInput = {
   id?: string;
   name: string;
   promptNotes: string | null;
-  requiredItems: Record<string, boolean>;
+  weights: Record<ItemKey, number>;
+  passScore: number;
 };
 
 export async function saveUniform(input: UniformInput): Promise<void> {
@@ -333,7 +393,8 @@ export async function saveUniform(input: UniformInput): Promise<void> {
   const row = {
     name: input.name,
     prompt_notes: input.promptNotes,
-    required_items: input.requiredItems,
+    score_weights: input.weights,
+    pass_score: input.passScore,
   };
 
   const { error } = input.id
@@ -343,4 +404,93 @@ export async function saveUniform(input: UniformInput): Promise<void> {
   if (error) {
     throw new StorageError(`Could not save the uniform: ${error.message}`, 502);
   }
+}
+
+/**
+ * Stores one reference photo for a uniform item, replacing any previous one.
+ *
+ * These are company assets rather than one person's photos, so they live under
+ * a `uniforms/<profile>` prefix instead of the uploader's folder — see
+ * `pathPrefix` in the storage provider.
+ */
+export async function saveReferenceImage(input: {
+  uniformProfileId: string;
+  kind: ItemKey;
+  file: File;
+}): Promise<void> {
+  const supabase = supabaseAdmin();
+
+  const bytes = new Uint8Array(await input.file.arrayBuffer());
+  const contentType = sniffImageType(bytes);
+  if (!contentType) {
+    throw new StorageError("Only JPEG, PNG, and WebP images are accepted.", 415);
+  }
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) {
+    throw new StorageError("That image is too large.", 413);
+  }
+
+  const provider = activeProvider();
+  const { path } = await provider.upload({
+    userId: "uniforms",
+    pathPrefix: `uniforms/${input.uniformProfileId}`,
+    bytes,
+    contentType,
+    extension: ALLOWED_TYPES[contentType],
+  });
+
+  // Read the old row first so its object can be removed once the new one is
+  // safely recorded — losing the pointer would leak the file forever.
+  const { data: previous } = await supabase
+    .from("uniform_reference_images")
+    .select("provider, storage_path")
+    .eq("uniform_profile_id", input.uniformProfileId)
+    .eq("kind", input.kind)
+    .maybeSingle<{ provider: string; storage_path: string }>();
+
+  const { error } = await supabase
+    .from("uniform_reference_images")
+    .upsert(
+      {
+        uniform_profile_id: input.uniformProfileId,
+        kind: input.kind,
+        provider: provider.name,
+        storage_path: path,
+        content_type: contentType,
+        byte_size: bytes.byteLength,
+      },
+      { onConflict: "uniform_profile_id,kind" },
+    );
+
+  if (error) {
+    await provider.remove([path]);
+    throw new StorageError(`Could not save the reference image: ${error.message}`, 502);
+  }
+
+  if (previous) {
+    await providerFor(previous.provider).remove([previous.storage_path]).catch(() => {});
+  }
+}
+
+export async function deleteReferenceImage(
+  uniformProfileId: string,
+  kind: ItemKey,
+): Promise<void> {
+  const supabase = supabaseAdmin();
+
+  const { data } = await supabase
+    .from("uniform_reference_images")
+    .select("provider, storage_path")
+    .eq("uniform_profile_id", uniformProfileId)
+    .eq("kind", kind)
+    .maybeSingle<{ provider: string; storage_path: string }>();
+
+  if (!data) return;
+
+  await supabase
+    .from("uniform_reference_images")
+    .delete()
+    .eq("uniform_profile_id", uniformProfileId)
+    .eq("kind", kind);
+
+  await providerFor(data.provider).remove([data.storage_path]).catch(() => {});
 }

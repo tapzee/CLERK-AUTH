@@ -11,6 +11,14 @@ export type ProviderName = "supabase" | "cloudinary";
 export type UploadInput = {
   /** Clerk user id. Providers must scope the stored object under it. */
   userId: string;
+  /**
+   * Overrides the per-user folder.
+   *
+   * Company assets — a uniform reference photo, say — belong to the business
+   * rather than to whoever happened to upload them, so they live outside the
+   * per-user prefix. Still chosen on the server; a client can never supply it.
+   */
+  pathPrefix?: string;
   bytes: Uint8Array;
   contentType: AllowedType;
   extension: string;

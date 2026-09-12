@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { checkGeofence, formatDistance } from "@/lib/attendance/geofence";
 import type { AttendanceEvent, AttendanceStatus, DressCheck, PunchKind } from "@/lib/attendance/types";
-import { captureFrame, EVIDENCE_MAX_EDGE, MODEL_MAX_EDGE } from "@/lib/image";
+import { captureFrame } from "@/lib/image";
 import { isFixFresh, useGeolocation } from "@/lib/hooks/useGeolocation";
 
 type Phase =
@@ -22,8 +22,6 @@ type Shot = {
   blob: Blob;
   width: number;
   height: number;
-  /** The 384px copy the uniform check will actually judge. */
-  modelBlob: Blob | null;
 };
 
 const LABEL: Record<PunchKind, string> = { in: "Check in", out: "Check out" };
@@ -124,23 +122,19 @@ export function AttendancePunch({ status }: { status: AttendanceStatus }) {
     const video = videoRef.current;
     if (!video) return;
 
-    // Both sizes come off the same live frame, before the stream is torn down:
-    // the 640px one a manager reviews, the 384px one the model judges.
-    const evidence = await captureFrame(video, EVIDENCE_MAX_EDGE);
-    const model = await captureFrame(video, MODEL_MAX_EDGE);
-
-    if (!evidence) {
+    // One frame serves both the manager's review and the uniform check.
+    const frame = await captureFrame(video);
+    if (!frame) {
       setPhase({ kind: "error", message: "Could not read a frame from the camera." });
       return;
     }
 
     stopStream();
     setShot({
-      previewUrl: URL.createObjectURL(evidence.blob),
-      blob: evidence.blob,
-      width: evidence.width,
-      height: evidence.height,
-      modelBlob: model?.blob ?? null,
+      previewUrl: URL.createObjectURL(frame.blob),
+      blob: frame.blob,
+      width: frame.width,
+      height: frame.height,
     });
     setPhase({ kind: "review" });
   }, [stopStream]);
@@ -157,7 +151,6 @@ export function AttendancePunch({ status }: { status: AttendanceStatus }) {
 
     const form = new FormData();
     form.append("photo", shot.blob, "punch.jpg");
-    if (shot.modelBlob) form.append("modelPhoto", shot.modelBlob, "punch-small.jpg");
     form.append("kind", nextKind);
     form.append("width", String(shot.width));
     form.append("height", String(shot.height));
@@ -379,11 +372,19 @@ function EventRow({ event }: { event: AttendanceEvent }) {
   );
 }
 
-const ITEM_LABELS: Record<string, string> = {
-  cap: "cap",
-  apron: "apron",
-  shirt: "shirt",
-};
+/** Stable order, and the wording staff see. */
+const ITEM_LABELS: Array<[string, string]> = [
+  ["cap", "cap"],
+  ["apron", "apron"],
+  ["shirt", "shirt"],
+  ["logo", "logo"],
+];
+
+function itemsIn(check: DressCheck, state: string): string[] {
+  return ITEM_LABELS.filter(([key]) => check.items?.[key] === state).map(
+    ([, label]) => label,
+  );
+}
 
 function DressCheckLine({ check }: { check: DressCheck }) {
   if (check.status === "skipped") return null;
@@ -400,34 +401,36 @@ function DressCheckLine({ check }: { check: DressCheck }) {
     );
   }
 
-  // Only items the model actually reported on, in a stable order.
-  const missing = Object.entries(check.items ?? {})
-    .filter(([name, state]) => ITEM_LABELS[name] && state === "n")
-    .map(([name]) => ITEM_LABELS[name]);
+  const missing = itemsIn(check, "n");
+  const unclear = itemsIn(check, "?");
 
-  const unclear = Object.entries(check.items ?? {})
-    .filter(([name, state]) => ITEM_LABELS[name] && state === "?")
-    .map(([name]) => ITEM_LABELS[name]);
+  const tone =
+    check.verdict === "pass"
+      ? "text-[color:var(--success)]"
+      : check.verdict === "fail"
+        ? "text-[color:var(--danger)]"
+        : "text-muted";
 
-  if (check.verdict === "pass") {
-    return (
-      <p className="text-xs text-[color:var(--success)]">Uniform OK</p>
-    );
-  }
-
-  if (check.verdict === "fail") {
-    return (
-      <p className="text-xs text-[color:var(--danger)] text-pretty">
-        Uniform problem{missing.length > 0 && `: no ${missing.join(", no ")}`}
-        {check.reason && ` — ${check.reason}`}
-      </p>
-    );
-  }
+  const detail =
+    check.verdict === "pass"
+      ? "Uniform OK"
+      : check.verdict === "fail"
+        ? missing.length > 0
+          ? `No ${missing.join(", no ")}`
+          : "Below the pass mark"
+        : `Could not tell${unclear.length > 0 ? ` — ${unclear.join(", ")} unclear` : ""}`;
 
   return (
-    <p className="text-xs text-muted text-pretty">
-      Uniform unclear from the photo
-      {unclear.length > 0 && ` (${unclear.join(", ")})`} — a manager will review it.
+    <p className={`flex flex-wrap items-baseline gap-x-2 text-xs ${tone}`}>
+      {check.score !== null && (
+        <span className="rounded-full bg-current/10 px-2 py-0.5 font-medium tabular-nums">
+          {check.score}/100
+        </span>
+      )}
+      <span className="text-pretty">
+        {detail}
+        {check.verdict !== "pass" && check.reason && ` — ${check.reason}`}
+      </span>
     </p>
   );
 }

@@ -33,6 +33,8 @@ export type DressCheck = {
   /** Per-item outcome, e.g. {"cap": "y", "apron": "n"}. */
   items: Record<string, string> | null;
   reason: string | null;
+  /** Out of 100, from the cart's uniform weights. Null until judged. */
+  score: number | null;
 };
 
 export type AttendanceEvent = {

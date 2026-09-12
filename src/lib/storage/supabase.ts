@@ -10,10 +10,10 @@ const SIGNED_URL_TTL_SECONDS = 60 * 5;
 export const supabaseStorage: StorageProvider = {
   name: "supabase",
 
-  async upload({ userId, bytes, contentType, extension }: UploadInput) {
-    // Built from the verified Clerk user id, so one user can never write into
-    // another user's prefix.
-    const path = `${userId}/${crypto.randomUUID()}.${extension}`;
+  async upload({ userId, pathPrefix, bytes, contentType, extension }: UploadInput) {
+    // Built on the server, either from the verified Clerk user id or from a
+    // prefix the server chose. Either way a client cannot pick where it lands.
+    const path = `${pathPrefix ?? userId}/${crypto.randomUUID()}.${extension}`;
 
     const { error } = await supabaseAdmin()
       .storage.from(serverEnv.photosBucket)

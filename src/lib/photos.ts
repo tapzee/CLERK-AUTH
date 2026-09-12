@@ -55,7 +55,7 @@ export type PhotoWithUrl = PhotoRow & { url: string | null };
  * Trusting the browser's `File.type` alone would let a caller label anything as
  * an image, so the first bytes are checked against the real signature too.
  */
-function sniffImageType(bytes: Uint8Array): AllowedType | null {
+export function sniffImageType(bytes: Uint8Array): AllowedType | null {
   if (bytes.length < 12) return null;
 
   // JPEG: FF D8 FF

@@ -28,8 +28,8 @@ function client() {
 export const cloudinaryStorage: StorageProvider = {
   name: "cloudinary",
 
-  async upload({ userId, bytes, extension }: UploadInput) {
-    const folder = `${serverEnv.cloudinaryFolder}/${userId}`;
+  async upload({ userId, pathPrefix, bytes, extension }: UploadInput) {
+    const folder = `${serverEnv.cloudinaryFolder}/${pathPrefix ?? userId}`;
 
     const result = await new Promise<UploadApiResponse>((resolve, reject) => {
       const stream = client().uploader.upload_stream(
