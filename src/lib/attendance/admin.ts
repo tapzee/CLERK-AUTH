@@ -290,10 +290,11 @@ export type AdminUniform = {
 };
 
 const DEFAULT_WEIGHTS: Record<ItemKey, number> = {
-  cap: 25,
-  apron: 25,
-  shirt: 30,
-  logo: 20,
+  cap: 20,
+  apron: 20,
+  shirt: 25,
+  logo: 15,
+  neat: 20,
 };
 
 function readWeights(raw: unknown): Record<ItemKey, number> {
