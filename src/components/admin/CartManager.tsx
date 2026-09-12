@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 
-import { IDLE, saveCartAction, type ActionState } from "@/app/admin/actions";
+import { saveCartAction } from "@/app/admin/actions";
+import { IDLE, type ActionState } from "@/app/admin/action-state";
 import type { AdminCart, AdminUniform } from "@/lib/attendance/admin";
 import { distanceMetres, formatDistance, MAX_ACCURACY_M } from "@/lib/attendance/geofence";
 import { useGeolocation } from "@/lib/hooks/useGeolocation";
