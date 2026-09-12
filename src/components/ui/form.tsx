@@ -1,23 +1,15 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { ActionState } from "@/lib/manage/action-state";
 
 /**
  * The interactive half of the UI kit.
- *
- * Split from `primitives.tsx` so those stay server components: a `"use client"`
- * directive at the top of a shared module would pull every page that imports a
- * Card into the client bundle.
  */
 
 /**
- * A submit button that disables itself while its form is in flight.
- *
- * `useFormStatus` reads the state of the nearest enclosing `<form>`, so this
- * needs no props and no wiring at the call site -- which is what keeps a
- * double-submitted payroll approval from being one forgotten prop away.
+ * A submit button that disables itself and shows a micro-spinner while its form is in flight.
  */
 export function SubmitButton({
   children,
@@ -26,18 +18,15 @@ export function SubmitButton({
   disabled = false,
   name,
   value,
+  icon,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
   variant?: "primary" | "ghost" | "danger";
   disabled?: boolean;
-  /**
-   * Posted alongside the form when *this* button submits it, which is how one
-   * form can offer two outcomes -- approve and decline -- without two forms or
-   * a hidden radio group.
-   */
   name?: string;
   value?: string;
+  icon?: React.ReactNode;
 }) {
   const { pending } = useFormStatus();
 
@@ -49,29 +38,44 @@ export function SubmitButton({
       disabled={pending || disabled}
       className={`btn btn-${variant}`}
     >
-      {pending ? pendingLabel : children}
+      {pending ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin text-current" />
+          <span>{pendingLabel}</span>
+        </>
+      ) : (
+        <>
+          {icon}
+          <span>{children}</span>
+        </>
+      )}
     </button>
   );
 }
 
-/** The error or confirmation a Server Action handed back. */
+/** The error or confirmation a Server Action handed back */
 export function FormFeedback({ state }: { state: ActionState }) {
   if (state.error) {
     return (
-      <p
+      <div
         role="alert"
-        className="rounded-lg bg-danger-soft px-3.5 py-2.5 text-sm text-danger"
+        className="flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-xs font-medium text-danger animate-in fade-in slide-in-from-top-1"
       >
-        {state.error}
-      </p>
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span className="text-pretty">{state.error}</span>
+      </div>
     );
   }
 
   if (state.ok && state.message) {
     return (
-      <p role="status" className="rounded-lg bg-success-soft px-3.5 py-2.5 text-sm text-success">
-        {state.message}
-      </p>
+      <div
+        role="status"
+        className="flex items-start gap-2.5 rounded-xl border border-success/30 bg-success-soft px-3.5 py-2.5 text-xs font-medium text-success animate-in fade-in slide-in-from-top-1"
+      >
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <span className="text-pretty">{state.message}</span>
+      </div>
     );
   }
 

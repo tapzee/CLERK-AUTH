@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Clock } from "lucide-react";
 
 import { AppNav } from "@/components/AppNav";
 
@@ -26,44 +27,48 @@ export const metadata: Metadata = {
     "Selfie check-in with an automatic uniform check, shift times, and salary worked out from attendance.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Browser extensions inject attributes onto <html> before React hydrates
-    // (ad blockers, password managers, and the like). suppressHydrationWarning
-    // applies to this element's own attributes only -- one level deep -- so real
-    // mismatches inside the tree are still reported.
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col bg-background text-foreground">
+      <body className="flex min-h-full flex-col bg-background text-foreground selection:bg-accent/20 selection:text-accent">
         <ClerkProvider>
-          <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur">
-            <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3.5">
-              <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
+          {/* Ambient lighting mesh */}
+          <div className="ambient-mesh" aria-hidden="true" />
+
+          {/* Sticky frosted glass header */}
+          <header className="sticky top-0 z-30 border-b border-border/70 bg-surface-glass backdrop-blur-xl">
+            <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+              <Link
+                href="/"
+                className="group flex items-center gap-2.5 font-bold tracking-tight text-foreground transition"
+              >
                 <span
                   aria-hidden
-                  className="grid h-7 w-7 place-items-center rounded-lg bg-accent text-accent-foreground"
+                  className="grid h-8 w-8 place-items-center rounded-xl bg-accent text-accent-foreground shadow-md shadow-accent/20 transition-transform group-hover:scale-105"
                 >
-                  {/* A clock face, drawn rather than an emoji so it inherits the accent. */}
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" strokeLinecap="round" />
-                  </svg>
+                  <Clock className="h-4 w-4 stroke-[2.5]" />
                 </span>
-                Shift
+                <span className="text-base font-bold tracking-tight">Shift</span>
               </Link>
 
               <AppNav />
             </nav>
           </header>
 
-          <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 sm:py-10">{children}</main>
+          <main className="relative z-10 mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-10">
+            {children}
+          </main>
 
-          <footer className="border-t border-border">
-            <div className="mx-auto max-w-6xl px-6 py-5 text-xs text-muted">
-              Attendance photos are stored privately and served over short-lived signed URLs.
+          <footer className="relative z-10 border-t border-border/60 bg-surface-glass/40 backdrop-blur-sm">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 text-xs text-muted sm:px-6">
+              <p>Shift · Intelligent Attendance, Uniform Verification &amp; Payroll</p>
+              <p className="text-[11px] text-muted/80">
+                Attendance photos are encrypted and served over short-lived signed URLs.
+              </p>
             </div>
           </footer>
         </ClerkProvider>

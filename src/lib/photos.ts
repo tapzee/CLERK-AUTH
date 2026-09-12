@@ -20,9 +20,10 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // 4 MB
 
 /**
- * Why a photo was taken. Attendance evidence shares this table so it inherits
- * the storage-provider abstraction and per-user pathing, but it is kept out of
- * the personal gallery — see `listPhotos`.
+ * Why a photo was taken. `"personal"` is a leftover from an earlier version of
+ * this app; every photo taken today is `"attendance"` evidence, but the column
+ * and its check constraint keep the old value valid rather than rewriting
+ * history that may still be on disk.
  */
 export type PhotoPurpose = "personal" | "attendance";
 
@@ -48,8 +49,6 @@ export type PhotoRow = {
   capture_method: CaptureMethod;
   purpose: PhotoPurpose;
 };
-
-export type PhotoWithUrl = PhotoRow & { url: string | null };
 
 /**
  * Trusting the browser's `File.type` alone would let a caller label anything as
@@ -182,60 +181,6 @@ export async function storeVerifiedPhoto(
   }
 
   return data;
-}
-
-/** Identifies a stored object across providers, for the lookup map below. */
-function objectKey(provider: string, path: string) {
-  return `${provider}:${path}`;
-}
-
-/**
- * Lists the caller's photos, each with a freshly minted readable URL.
- *
- * Defaults to personal captures: attendance evidence lives in the same table
- * but belongs to the manager's view, not the staff member's gallery.
- */
-export async function listPhotos(
-  userId: string,
-  limit = 60,
-  purpose: PhotoPurpose = "personal",
-): Promise<PhotoWithUrl[]> {
-  const { data, error } = await supabaseAdmin()
-    .from("photos")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("purpose", purpose)
-    .order("captured_at", { ascending: false })
-    .limit(limit)
-    .returns<PhotoRow[]>();
-
-  if (error) {
-    throw new StorageError(`Could not load photos: ${error.message}`, 502);
-  }
-  if (!data?.length) return [];
-
-  // Rows may span providers if STORAGE_PROVIDER was changed at some point.
-  const byProvider = new Map<string, string[]>();
-  for (const photo of data) {
-    const paths = byProvider.get(photo.provider) ?? [];
-    paths.push(photo.storage_path);
-    byProvider.set(photo.provider, paths);
-  }
-
-  const urls = new Map<string, string | null>();
-  await Promise.all(
-    [...byProvider].map(async ([name, paths]) => {
-      const resolved = await providerFor(name).signedUrls(paths);
-      for (const [path, url] of resolved) {
-        urls.set(objectKey(name, path), url);
-      }
-    }),
-  );
-
-  return data.map((photo) => ({
-    ...photo,
-    url: urls.get(objectKey(photo.provider, photo.storage_path)) ?? null,
-  }));
 }
 
 /** Deletes one photo, but only if it belongs to the calling user. */

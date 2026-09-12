@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requirePermission } from "@/lib/auth/viewer";
-import { REFERENCE_KEYS, ITEM_KEYS, type ItemKey } from "@/lib/uniform/items";
+import { REFERENCE_KEYS, type ItemKey } from "@/lib/uniform/items";
 import { StorageError } from "@/lib/storage";
 import type { ActionState } from "@/lib/manage/action-state";
 import * as form from "@/lib/manage/form";
@@ -15,6 +15,7 @@ import {
   deleteReferenceImage,
   saveReferenceImage,
   saveUniform,
+  updateReferenceDescription,
 } from "@/lib/manage/uniforms";
 
 /**
@@ -140,20 +141,10 @@ export async function saveUniformAction(
   try {
     await requirePermission("uniform:write");
 
-    const weights = {} as Record<ItemKey, number>;
-    for (const item of ITEM_KEYS) {
-      const value = Number(form.text(data, `weight.${item}`));
-      weights[item] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
-    }
-    if (ITEM_KEYS.every((item) => weights[item] === 0)) {
-      throw new StorageError("At least one item needs a weight above zero.", 400);
-    }
-
     await saveUniform({
       id: form.optionalText(data, "id") ?? undefined,
       name: form.requiredText(data, "name", "Uniform name"),
       promptNotes: form.optionalText(data, "promptNotes"),
-      weights,
       passScore: form.integerInRange(data, "passScore", "Pass mark", 0, 100),
     });
 
@@ -215,6 +206,34 @@ export async function deleteReferenceAction(
 
     revalidateConsole();
     return done("Reference photo removed.");
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Corrects the wording a description was auto-generated with.
+ *
+ * Every kind except the logo is matched by this text rather than by resending
+ * its photo on every check -- see the module comment on
+ * `describeReferenceImage` -- so a wrong colour or cut here is worth being able
+ * to fix directly, without re-uploading the photo just to trigger a rewrite.
+ */
+export async function updateReferenceDescriptionAction(
+  _previous: ActionState,
+  data: FormData,
+): Promise<ActionState> {
+  try {
+    await requirePermission("uniform:write");
+
+    await updateReferenceDescription(
+      form.requiredText(data, "uniformProfileId", "Uniform"),
+      referenceKind(data),
+      form.requiredText(data, "description", "Description"),
+    );
+
+    revalidateConsole();
+    return done("Description saved.");
   } catch (error) {
     return fail(error);
   }

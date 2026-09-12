@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Camera, AlertCircle, Shield } from "lucide-react";
 
 import { ConsoleNav } from "@/components/manage/ConsoleNav";
 import { can, ROLE_LABELS } from "@/lib/auth/rbac";
@@ -11,18 +12,9 @@ import { NAV_ITEMS } from "./nav";
 
 export const metadata = { title: "Console" };
 
-// Attendance, the review queue and payroll all change through the day, and the
-// console is only ever a handful of people, so nothing here is worth caching.
 export const dynamic = "force-dynamic";
 
-/**
- * The management console shell.
- *
- * Guards the whole section once, then hands each page a nav filtered to what
- * this role may actually open. Every page and every action re-checks its own
- * permission: this layout decides what is *shown*, not what is *allowed*.
- */
-export default async function ManageLayout({ children }: LayoutProps<"/manage">) {
+export default async function ManageLayout({ children }: { children: React.ReactNode }) {
   const state = await getViewerState();
 
   if (state.status === "signed-out") redirect("/sign-in");
@@ -35,32 +27,38 @@ export default async function ManageLayout({ children }: LayoutProps<"/manage">)
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-5">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Console</p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-2 font-medium">
-            {viewer.fullName}
-            <Pill tone="accent">{ROLE_LABELS[viewer.role]}</Pill>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-accent">
+            Management Console
           </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2.5">
+            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              {viewer.fullName}
+            </h2>
+            <Pill tone="accent" className="font-mono text-xs">
+              <Shield className="h-3 w-3 inline mr-1" />
+              {ROLE_LABELS[viewer.role]}
+            </Pill>
+          </div>
         </div>
-        <Link href="/punch" className="btn btn-ghost">
-          My punch screen
+        <Link href="/punch" className="btn btn-ghost shadow-sm text-xs sm:text-sm">
+          <Camera className="h-4 w-4 text-accent" />
+          <span>Punch Screen</span>
         </Link>
       </header>
 
-      {/*
-        A manager with no cart is a real misconfiguration and an easy one to
-        miss: every scoped query would return nothing and the console would look
-        merely empty rather than broken.
-      */}
       {!hasUsableScope(viewer) && (
-        <p className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning text-pretty">
-          You are not assigned to a cart, so there is nothing in scope for you to
-          manage. Ask an owner to assign you to one.
-        </p>
+        <div className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning-soft p-4 text-xs font-medium text-warning">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="text-pretty">
+            You are not assigned to a cart, so there is nothing in scope for you to manage.
+            Ask an owner to assign you to a cart.
+          </span>
+        </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-[13rem_minmax(0,1fr)]">
+      <div className="grid gap-6 md:grid-cols-[14rem_minmax(0,1fr)]">
         <ConsoleNav items={items} />
         <div className="min-w-0 space-y-6">{children}</div>
       </div>

@@ -10,7 +10,7 @@ import {
 import { StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadUniformForCart } from "@/lib/uniform/profile";
-import type { LocationInput } from "@/lib/geo";
+import type { CaptureMethod, LocationInput } from "@/lib/geo";
 
 import { checkGeofence } from "./geofence";
 import { judgeSelfie, rejectionMessage, type UniformResult } from "./uniform-check";
@@ -221,6 +221,8 @@ type PunchInput = {
   capturedAt: string | null;
   width: number | null;
   height: number | null;
+  /** 'manual' for the button, 'blink' when the on-device detector fired it. */
+  captureMethod: CaptureMethod;
 };
 
 /**
@@ -289,7 +291,7 @@ export async function recordPunch(input: PunchInput): Promise<AttendanceEvent> {
     height: input.height,
     capturedAt: input.capturedAt,
     location,
-    captureMethod: "manual",
+    captureMethod: input.captureMethod,
     purpose: "attendance",
   });
 
@@ -404,7 +406,7 @@ async function recordRejectedAttempt(
       height: input.height,
       capturedAt: input.capturedAt,
       location: input.location,
-      captureMethod: "manual",
+      captureMethod: input.captureMethod,
       purpose: "attendance",
     });
 

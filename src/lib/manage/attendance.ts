@@ -7,7 +7,7 @@ import { monthEnd } from "@/lib/payroll/calculate";
 import { businessDateIn } from "@/lib/attendance/service";
 import type { ReviewStatus, UniformVerdict } from "@/lib/attendance/types";
 
-import { listStaff, type StaffRecord } from "./staff";
+import { listStaff, trackableStaff, type StaffRecord } from "./staff";
 
 /**
  * Reading attendance as a manager rather than as the person who punched.
@@ -121,7 +121,7 @@ export async function getDaySheet(
   viewer: Viewer,
   businessDate: string,
 ): Promise<DayRow[]> {
-  const staff = (await listStaff(viewer)).filter((member) => member.active);
+  const staff = trackableStaff(await listStaff(viewer));
   if (staff.length === 0) return [];
 
   const staffIds = staff.map((member) => member.id);

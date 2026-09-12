@@ -1,3 +1,4 @@
+import { Users, ShieldCheck } from "lucide-react";
 import { requirePageAccess } from "@/lib/auth/viewer";
 import { getDaySheet, todayForViewer, type DayRow } from "@/lib/manage/attendance";
 import { formatDistance } from "@/lib/attendance/geofence";
@@ -14,21 +15,15 @@ import { DayPicker } from "@/components/manage/DayPicker";
 
 export const metadata = { title: "Attendance · Console" };
 
-/**
- * The day sheet: one row per person, whether or not they turned up.
- *
- * This is the screen the whole system exists to produce -- when each worker
- * checked in, how late that was against the shift their manager set, and what
- * the uniform check made of the photo.
- */
 export default async function AttendancePage({
   searchParams,
-}: PageProps<"/manage/attendance">) {
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const viewer = await requirePageAccess("attendance:read:team");
 
   const params = await searchParams;
   const requested = typeof params.date === "string" ? params.date : null;
-  // A hand-typed date in the query string is not worth a 500.
   const date = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested)
     ? requested
     : await todayForViewer(viewer);
@@ -38,42 +33,56 @@ export default async function AttendancePage({
   return (
     <section className="space-y-5">
       <PageHeader
-        title="Attendance"
-        description="Check-in and check-out times against each worker's shift."
+        eyebrow="Roster & Logs"
+        title="Attendance Sheet"
+        description="Daily check-in, check-out times, and automated uniform verification."
         action={<DayPicker date={date} />}
       />
 
       {sheet.length === 0 ? (
         <EmptyState
-          title="Nobody to show"
-          body="Once staff are enrolled and assigned to a cart, their day appears here."
+          icon={<Users className="h-5 w-5" />}
+          title="No attendance records"
+          body="Once staff are enrolled and assigned to a cart, their attendance will appear here."
         />
       ) : (
         <>
-          {/* Desktop: a real table. */}
+          {/* Desktop Table View */}
           <Card className="hidden overflow-hidden md:block">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-surface-muted/60 text-left">
-                <tr className="text-xs uppercase tracking-wide text-muted">
-                  <th className="px-4 py-2.5 font-semibold">Worker</th>
-                  <th className="px-4 py-2.5 font-semibold">Shift</th>
-                  <th className="px-4 py-2.5 font-semibold">In</th>
-                  <th className="px-4 py-2.5 font-semibold">Out</th>
-                  <th className="px-4 py-2.5 font-semibold">Uniform</th>
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border/80 bg-surface-muted/50">
+                <tr className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                  <th className="px-4 py-3">Worker</th>
+                  <th className="px-4 py-3">Assigned Shift</th>
+                  <th className="px-4 py-3">Check In</th>
+                  <th className="px-4 py-3">Check Out</th>
+                  <th className="px-4 py-3">Uniform Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-border/60">
                 {sheet.map((row) => (
-                  <tr key={row.staff.id} className="align-top">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{row.staff.fullName}</p>
-                      <p className="mt-0.5 text-xs text-muted">{row.staff.email}</p>
+                  <tr
+                    key={row.staff.id}
+                    className="transition-colors hover:bg-surface-muted/30"
+                  >
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid h-7 w-7 place-items-center rounded-lg bg-surface-muted text-xs font-bold text-foreground">
+                          {row.staff.fullName.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground">{row.staff.fullName}</p>
+                          <p className="text-xs text-muted">{row.staff.email}</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-muted tabular-nums">{shiftText(row)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5 font-mono text-xs text-muted">
+                      {shiftText(row)}
+                    </td>
+                    <td className="px-4 py-3.5">
                       <CheckInCell row={row} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       {row.checkOut ? (
                         <span className="flex flex-wrap items-center gap-2">
                           <LocalTime at={row.checkOut.at} />
@@ -85,7 +94,7 @@ export default async function AttendancePage({
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <UniformCell row={row} />
                     </td>
                   </tr>
@@ -94,36 +103,50 @@ export default async function AttendancePage({
             </table>
           </Card>
 
-          {/* Phone: the same rows, stacked. */}
-          <ul className="space-y-2.5 md:hidden">
+          {/* Mobile Card View */}
+          <ul className="space-y-3 md:hidden">
             {sheet.map((row) => (
-              <Card key={row.staff.id} className="p-4">
-                <li>
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <p className="font-medium">{row.staff.fullName}</p>
-                    <p className="text-xs text-muted tabular-nums">{shiftText(row)}</p>
+              <li key={row.staff.id}>
+                <Card className="p-4">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
+                        {row.staff.fullName.charAt(0)}
+                      </div>
+                      <p className="font-semibold text-foreground text-sm">{row.staff.fullName}</p>
+                    </div>
+                    <span className="font-mono text-xs text-muted">{shiftText(row)}</span>
                   </div>
 
-                  <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <dt className="label mb-0.5">In</dt>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-xl bg-surface-muted/50 p-2.5">
+                      <dt className="label mb-1">Check In</dt>
                       <dd>
                         <CheckInCell row={row} />
                       </dd>
                     </div>
-                    <div>
-                      <dt className="label mb-0.5">Out</dt>
-                      <dd>
-                        {row.checkOut ? <LocalTime at={row.checkOut.at} /> : <span className="text-muted">—</span>}
+                    <div className="rounded-xl bg-surface-muted/50 p-2.5">
+                      <dt className="label mb-1">Check Out</dt>
+                      <dd className="mt-0.5">
+                        {row.checkOut ? (
+                          <span className="flex items-center gap-1.5">
+                            <LocalTime at={row.checkOut.at} />
+                            {row.checkOut.earlyByMinutes ? (
+                              <Pill tone="warning">{row.checkOut.earlyByMinutes}m early</Pill>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
                       </dd>
                     </div>
                   </dl>
 
-                  <div className="mt-3">
+                  <div className="mt-3 border-t border-border/40 pt-2.5">
                     <UniformCell row={row} />
                   </div>
-                </li>
-              </Card>
+                </Card>
+              </li>
             ))}
           </ul>
         </>
@@ -138,31 +161,30 @@ function shiftText(row: DayRow): string {
   return `${row.staff.shiftStart.slice(0, 5)}${end} (+${row.staff.graceMinutes}m)`;
 }
 
-/** Arrival time, how late it was, and how far from the cart it was taken. */
 function CheckInCell({ row }: { row: DayRow }) {
   if (!row.checkIn) {
     return <Pill tone="danger">Absent</Pill>;
   }
 
   return (
-    <span className="flex flex-wrap items-center gap-2">
+    <span className="flex flex-wrap items-center gap-1.5">
       <LocalTime at={row.checkIn.at} />
       {row.checkIn.isLate ? (
         <Pill tone="danger">{row.checkIn.lateByMinutes}m late</Pill>
       ) : row.checkIn.lateByMinutes ? (
-        // Inside the allowance. Worth showing, not worth penalising.
         <Pill tone="neutral">+{row.checkIn.lateByMinutes}m</Pill>
       ) : (
         <Pill tone="success">On time</Pill>
       )}
       {row.checkIn.distanceM !== null && (
-        <span className="text-xs text-muted">{formatDistance(row.checkIn.distanceM)}</span>
+        <span className="text-[11px] font-mono text-muted">
+          ({formatDistance(row.checkIn.distanceM)})
+        </span>
       )}
     </span>
   );
 }
 
-/** The verdict, plus how many selfies were turned away before this one. */
 function UniformCell({ row }: { row: DayRow }) {
   const check = row.checkIn?.dressCheck;
 
@@ -190,8 +212,9 @@ function UniformCell({ row }: { row: DayRow }) {
   const faults = describeFaults(check.items);
 
   return (
-    <span className="flex flex-wrap items-center gap-2">
+    <span className="flex flex-wrap items-center gap-1.5">
       <Pill tone={tone}>
+        <ShieldCheck className="h-3 w-3 inline mr-0.5" />
         {check.score !== null ? `${check.score}/100` : (check.verdict ?? "unknown")}
       </Pill>
       {row.checkIn.reviewStatus === "pending" && <Pill tone="warning">Needs review</Pill>}

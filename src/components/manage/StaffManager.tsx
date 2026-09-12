@@ -1,6 +1,15 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import {
+  UserPlus,
+  User,
+  Store,
+  Clock,
+  Banknote,
+  Edit3,
+  Shield,
+} from "lucide-react";
 
 import { saveStaffAction } from "@/app/manage/actions";
 import { IDLE, type ActionState } from "@/lib/manage/action-state";
@@ -11,15 +20,6 @@ import { formatMoney } from "@/lib/payroll/calculate";
 import { Card, EmptyState, Field, Pill, SectionHeading } from "@/components/ui/primitives";
 import { FormFeedback, SubmitButton } from "@/components/ui/form";
 
-/**
- * The roster, and the terms each person works under.
- *
- * One form covers identity, shift, grace and pay because they are set together
- * when somebody is hired and rarely touched apart afterwards -- splitting them
- * across three screens would mean three round trips to enrol one worker.
- */
-
-/** `null` means the form is closed; `{ member: null }` means "enrol somebody new". */
 type Editing = { member: StaffRecord | null } | null;
 
 export function StaffManager({
@@ -37,8 +37,8 @@ export function StaffManager({
   return (
     <section className="space-y-4">
       <SectionHeading
-        title="Staff"
-        description="Enrol by email — the role is attached to the address they sign in with."
+        title="Staff Directory"
+        description="Enrol team members by Google email. Access and permissions match their login account."
         action={
           <button
             onClick={() => setEditing({ member: null })}
@@ -46,14 +46,14 @@ export function StaffManager({
             title={carts.length === 0 ? "Add a cart first." : undefined}
             className="btn btn-primary"
           >
-            Add staff
+            <UserPlus className="h-4 w-4" />
+            <span>Add staff</span>
           </button>
         }
       />
 
       {editing && (
         <StaffForm
-          // Remounts the form when the subject changes, so defaultValues reload.
           key={editing.member?.id ?? "new"}
           member={editing.member}
           carts={carts}
@@ -64,41 +64,61 @@ export function StaffManager({
 
       {staff.length === 0 ? (
         <EmptyState
+          icon={<User className="h-5 w-5" />}
           title="Nobody enrolled yet"
-          body="Add the people who work at this cart. They can sign in straight away — their record is waiting for the email address you enter."
+          body="Add staff members and assign them to a cart. They can sign in immediately with their Google account."
         />
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {staff.map((member) => (
             <li key={member.id}>
-              <Card className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 font-medium">
-                    {member.fullName}
-                    {member.role !== "staff" && (
-                      <Pill tone="accent">{ROLE_LABELS[member.role]}</Pill>
-                    )}
-                    {!member.active && <Pill tone="neutral">Inactive</Pill>}
-                    {!member.clerkUserId && <Pill tone="warning">Never signed in</Pill>}
-                  </p>
+              <Card className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-4 transition-all hover:border-border">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-sm font-bold text-accent">
+                    {member.fullName.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-foreground text-sm sm:text-base">
+                        {member.fullName}
+                      </p>
+                      {member.role !== "staff" && (
+                        <Pill tone="accent" className="text-[10px]">
+                          <Shield className="h-3 w-3 inline mr-0.5" />
+                          {ROLE_LABELS[member.role]}
+                        </Pill>
+                      )}
+                      {!member.active && <Pill tone="neutral">Inactive</Pill>}
+                      {!member.clerkUserId && <Pill tone="warning">Never signed in</Pill>}
+                    </div>
 
-                  <p className="mt-0.5 truncate text-xs text-muted">{member.email}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted">{member.email}</p>
 
-                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
-                    <span>
-                      {member.cartId ? (cartName.get(member.cartId) ?? "Unknown cart") : "No cart"}
-                    </span>
-                    <span>{shiftLabel(member)}</span>
-                    <span>
-                      {member.monthlySalary === null
-                        ? "No salary set"
-                        : `${formatMoney(member.monthlySalary)}/month · ${member.workingDaysPerMonth} days`}
-                    </span>
-                  </p>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1">
+                        <Store className="h-3 w-3 text-accent" />
+                        {member.cartId ? (cartName.get(member.cartId) ?? "Unknown cart") : "No cart"}
+                      </span>
+                      <span className="inline-flex items-center gap-1 font-mono">
+                        <Clock className="h-3 w-3 text-accent" />
+                        {shiftLabel(member)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 font-mono">
+                        <Banknote className="h-3 w-3 text-accent" />
+                        {member.monthlySalary === null
+                          ? "No salary set"
+                          : `${formatMoney(member.monthlySalary)}/mo (${member.workingDaysPerMonth}d)`}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <button onClick={() => setEditing({ member })} className="btn btn-ghost">
-                  Edit
+                <button
+                  onClick={() => setEditing({ member })}
+                  className="btn btn-ghost px-3 py-1.5 text-xs sm:text-sm"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  <span>Edit</span>
                 </button>
               </Card>
             </li>
@@ -112,7 +132,7 @@ export function StaffManager({
 function shiftLabel(member: StaffRecord): string {
   if (!member.shiftStart) return "No shift";
   const end = member.shiftEnd ? `–${member.shiftEnd.slice(0, 5)}` : "";
-  return `${member.shiftStart.slice(0, 5)}${end} · ${member.graceMinutes}m grace`;
+  return `${member.shiftStart.slice(0, 5)}${end} (${member.graceMinutes}m grace)`;
 }
 
 function StaffForm({
@@ -133,37 +153,54 @@ function StaffForm({
   }, [state.ok, onDone]);
 
   return (
-    <Card className="p-4">
+    <Card className="border-accent/30 p-5 shadow-lg">
+      <div className="mb-4 flex items-center justify-between border-b border-border/70 pb-3">
+        <p className="font-bold text-base text-foreground">
+          {member ? `Edit Staff · ${member.fullName}` : "Enrol New Staff Member"}
+        </p>
+      </div>
+
       <form action={action} className="space-y-5">
         {member && <input type="hidden" name="id" value={member.id} />}
 
-        {/* Who ------------------------------------------------------------ */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* Identity Section */}
+        <div className="grid gap-3.5 sm:grid-cols-2">
           <Field
-            label="Email address"
-            hint="The Google address they sign in with. Their role follows this address."
+            label="Email Address"
+            hint="The Google address used to sign in. Permissions attach automatically."
           >
             <input
               name="email"
               type="email"
               defaultValue={member?.email ?? ""}
               required
-              placeholder="name@gmail.com"
+              placeholder="worker@gmail.com"
               className="input"
             />
           </Field>
-          <Field label="Full name">
-            <input name="fullName" defaultValue={member?.fullName ?? ""} required className="input" />
+          <Field label="Full Name">
+            <input
+              name="fullName"
+              defaultValue={member?.fullName ?? ""}
+              required
+              placeholder="e.g. Alex Sharma"
+              className="input"
+            />
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3.5 sm:grid-cols-3">
           <Field label="Phone (optional)">
-            <input name="phone" defaultValue={member?.phone ?? ""} className="input" />
+            <input
+              name="phone"
+              defaultValue={member?.phone ?? ""}
+              placeholder="+91 98765 43210"
+              className="input"
+            />
           </Field>
-          <Field label="Cart">
+          <Field label="Assigned Cart">
             <select name="cartId" defaultValue={member?.cartId ?? ""} className="input">
-              <option value="">— none —</option>
+              <option value="">— Unassigned —</option>
               {carts.map((cart) => (
                 <option key={cart.id} value={cart.id}>
                   {cart.name}
@@ -172,8 +209,8 @@ function StaffForm({
             </select>
           </Field>
           <Field
-            label="Role"
-            hint={canSetRoles ? undefined : "Only an owner can change a role."}
+            label="System Role"
+            hint={canSetRoles ? undefined : "Only an owner can change roles."}
           >
             <select
               name="role"
@@ -187,57 +224,51 @@ function StaffForm({
                 </option>
               ))}
             </select>
-            {/*
-              A disabled control posts nothing, which would fail the action's
-              role validation on every save a manager makes. This carries the
-              unchanged value instead; the server discards it for anybody
-              without `staff:role:write` either way.
-            */}
             {!canSetRoles && (
               <input type="hidden" name="role" value={member?.role ?? "staff"} />
             )}
           </Field>
         </div>
 
-        {/*
-          What each role actually grants. A <select> cannot carry this per
-          option, and handing somebody the console is not a decision to make
-          from a one-word label.
-        */}
         {canSetRoles && (
-          <dl className="space-y-1 rounded-xl bg-surface-muted px-3.5 py-3 text-xs">
+          <dl className="space-y-1.5 rounded-xl border border-border/50 bg-surface-muted/50 p-3.5 text-xs">
             {ROLES.map((role: Role) => (
               <div key={role} className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">{ROLE_LABELS[role]}:</dt>
+                <dt className="font-semibold text-foreground">{ROLE_LABELS[role]}:</dt>
                 <dd className="text-muted">{ROLE_DESCRIPTIONS[role]}</dd>
               </div>
             ))}
           </dl>
         )}
 
-        {/* Shift ----------------------------------------------------------- */}
-        <fieldset className="space-y-3 border-t border-border pt-4">
-          <legend className="sr-only">Shift</legend>
-          <p className="text-sm font-medium">Shift</p>
+        {/* Shift Section */}
+        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+          <legend className="sr-only">Shift Configuration</legend>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-accent" />
+            <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+              Shift &amp; Grace Settings
+            </p>
+          </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Check in at">
+          <div className="grid gap-3.5 sm:grid-cols-3">
+            <Field label="Shift Start (Check In)">
               <input
                 name="shiftStart"
                 type="time"
                 defaultValue={member?.shiftStart?.slice(0, 5) ?? ""}
-                className="input"
+                className="input font-mono"
               />
             </Field>
-            <Field label="Check out at">
+            <Field label="Shift End (Check Out)">
               <input
                 name="shiftEnd"
                 type="time"
                 defaultValue={member?.shiftEnd?.slice(0, 5) ?? ""}
-                className="input"
+                className="input font-mono"
               />
             </Field>
-            <Field label="Grace (minutes)" hint="Arriving inside this still counts as on time.">
+            <Field label="Grace Window (Minutes)" hint="Arrivals within grace count as on time.">
               <input
                 name="graceMinutes"
                 type="number"
@@ -245,24 +276,24 @@ function StaffForm({
                 max={240}
                 defaultValue={member?.graceMinutes ?? 30}
                 required
-                className="input"
+                className="input font-mono"
               />
             </Field>
           </div>
-
-          <p className="text-xs text-muted text-pretty">
-            Leave the times blank and nothing is ever counted late — punches are still
-            recorded, just without a lateness figure.
-          </p>
         </fieldset>
 
-        {/* Pay -------------------------------------------------------------- */}
-        <fieldset className="space-y-3 border-t border-border pt-4">
-          <legend className="sr-only">Pay</legend>
-          <p className="text-sm font-medium">Pay</p>
+        {/* Pay Section */}
+        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+          <legend className="sr-only">Salary Configuration</legend>
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-accent" />
+            <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+              Compensation &amp; Deductions
+            </p>
+          </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Monthly salary">
+          <div className="grid gap-3.5 sm:grid-cols-3">
+            <Field label="Monthly Base Salary">
               <input
                 name="monthlySalary"
                 type="number"
@@ -270,10 +301,10 @@ function StaffForm({
                 step="1"
                 defaultValue={member?.monthlySalary ?? ""}
                 placeholder="e.g. 18000"
-                className="input"
+                className="input font-mono"
               />
             </Field>
-            <Field label="Working days / month" hint="26 is a six-day week.">
+            <Field label="Working Days / Month" hint="26 days = 6-day work week.">
               <input
                 name="workingDaysPerMonth"
                 type="number"
@@ -281,10 +312,10 @@ function StaffForm({
                 max={31}
                 defaultValue={member?.workingDaysPerMonth ?? 26}
                 required
-                className="input"
+                className="input font-mono"
               />
             </Field>
-            <Field label="Deduction per late day" hint="Set 0 to record lateness without docking pay.">
+            <Field label="Late Day Deduction" hint="0 = log lateness without docking pay.">
               <input
                 name="lateDeduction"
                 type="number"
@@ -292,32 +323,26 @@ function StaffForm({
                 step="1"
                 defaultValue={member?.lateDeduction ?? 0}
                 required
-                className="input"
+                className="input font-mono"
               />
             </Field>
           </div>
-
-          <p className="text-xs text-muted text-pretty">
-            Pay is the monthly salary divided by working days, times the days actually
-            present, less the deduction for each late day. To make a late day a half
-            day, set the deduction to half of one day&rsquo;s pay.
-          </p>
         </fieldset>
 
-        <label className="flex items-center gap-2.5 text-sm">
+        <label className="flex items-center gap-2.5 text-xs sm:text-sm font-medium cursor-pointer">
           <input
             type="checkbox"
             name="active"
             defaultChecked={member?.active ?? true}
-            className="h-4 w-4 accent-[var(--accent)]"
+            className="h-4 w-4 accent-accent rounded"
           />
-          Active — inactive staff cannot punch and are left out of payroll.
+          <span>Active — inactive staff cannot check in and are excluded from payroll.</span>
         </label>
 
         <FormFeedback state={state} />
 
-        <div className="flex flex-wrap gap-2.5">
-          <SubmitButton>{member ? "Save changes" : "Enrol"}</SubmitButton>
+        <div className="flex flex-wrap gap-2.5 pt-2">
+          <SubmitButton>{member ? "Save Changes" : "Enrol Staff"}</SubmitButton>
           <button type="button" onClick={onDone} className="btn btn-ghost">
             Cancel
           </button>

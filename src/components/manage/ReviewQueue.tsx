@@ -1,6 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
+import {
+  ShieldCheck,
+  ShieldAlert,
+  Check,
+  AlertTriangle,
+  Calendar,
+  Camera,
+} from "lucide-react";
 
 import { reviewPunchAction } from "@/app/manage/actions";
 import { IDLE, type ActionState } from "@/lib/manage/action-state";
@@ -14,20 +22,13 @@ import {
 import { Card, EmptyState, LocalTime, Pill, type Tone } from "@/components/ui/primitives";
 import { FormFeedback, SubmitButton } from "@/components/ui/form";
 
-/**
- * The photos a person has to look at.
- *
- * Everything in this queue is already recorded and already counted for pay --
- * being here means the model could not settle the photo, not that the worker
- * did anything wrong. That framing matters, because a manager who reads this
- * screen as a list of offenders will clear it carelessly.
- */
 export function ReviewQueue({ items }: { items: ReviewItem[] }) {
   if (items.length === 0) {
     return (
       <EmptyState
-        title="Nothing to review"
-        body="Every punch has a verdict. Photos land here only when the check cannot tell, or when it could not run at all."
+        icon={<ShieldCheck className="h-5 w-5 text-success" />}
+        title="Review Queue is Empty"
+        body="All selfie check-ins have automated verdicts. Photos land here only when the vision check requires manual verification."
       />
     );
   }
@@ -47,60 +48,79 @@ function ReviewCard({ item }: { item: ReviewItem }) {
   const [state, action] = useActionState<ActionState, FormData>(reviewPunchAction, IDLE);
 
   return (
-    <Card className="overflow-hidden">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-        <div className="aspect-[3/4] bg-black/90 sm:aspect-auto">
+    <Card className="overflow-hidden p-0 transition-all hover:border-border">
+      <div className="grid gap-0 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+        <div className="relative aspect-[3/4] bg-neutral-950 sm:aspect-auto">
           {item.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
             <img
               src={item.photoUrl}
-              alt={`Check-in selfie for ${item.staffName}`}
+              alt={`Selfie check-in for ${item.staffName}`}
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="grid h-full place-items-center p-6 text-center text-xs text-white/60">
-              The photo is no longer available.
+            <div className="grid h-full place-items-center p-6 text-center text-xs text-white/50">
+              <Camera className="mb-2 h-8 w-8 text-white/30" />
+              <span>Photo expired or unavailable</span>
             </div>
           )}
+          <div className="absolute top-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-mono text-white backdrop-blur">
+            Live Check-in
+          </div>
         </div>
 
-        <div className="space-y-3 p-4 pl-0 max-sm:pl-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <p className="font-medium">{item.staffName}</p>
-            <p className="text-sm text-muted">
-              <LocalTime at={item.at} />
-              {" · "}
-              {new Date(`${item.businessDate}T00:00:00`).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-              })}
-            </p>
+        <div className="flex flex-col justify-between p-5">
+          <div className="space-y-3.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
+                  {item.staffName.charAt(0)}
+                </div>
+                <p className="font-semibold text-foreground">{item.staffName}</p>
+              </div>
+              <p className="flex items-center gap-1.5 font-mono text-xs text-muted">
+                <Calendar className="h-3 w-3" />
+                <span>
+                  {new Date(`${item.businessDate}T00:00:00`).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+                {" · "}
+                <LocalTime at={item.at} />
+              </p>
+            </div>
+
+            <Verdict item={item} />
           </div>
 
-          <Verdict item={item} />
-
-          <form action={action} className="space-y-3 border-t border-border pt-3">
+          <form action={action} className="mt-4 space-y-3 border-t border-border/60 pt-4">
             <input type="hidden" name="eventId" value={item.eventId} />
 
             <input
               name="note"
-              placeholder="Note (optional) — what you saw in the photo"
-              className="input"
+              placeholder="Reviewer note (e.g. Cap was present but angled)"
+              className="input text-xs"
             />
 
             <FormFeedback state={state} />
 
-            {/*
-              Two outcomes, one form. A submitter's `name`/`value` pair is
-              included in the FormData it posts, so the action can tell which
-              button was pressed without a radio group or a second form.
-            */}
             <div className="flex flex-wrap gap-2.5">
-              <SubmitButton name="decision" value="cleared" variant="primary">
-                Uniform was fine
+              <SubmitButton
+                name="decision"
+                value="cleared"
+                variant="primary"
+                icon={<Check className="h-3.5 w-3.5" />}
+              >
+                Uniform Approved
               </SubmitButton>
-              <SubmitButton name="decision" value="flagged" variant="danger">
-                Record a breach
+              <SubmitButton
+                name="decision"
+                value="flagged"
+                variant="danger"
+                icon={<AlertTriangle className="h-3.5 w-3.5" />}
+              >
+                Record Breach
               </SubmitButton>
             </div>
           </form>
@@ -110,24 +130,21 @@ function ReviewCard({ item }: { item: ReviewItem }) {
   );
 }
 
-/** What the model said, item by item, so a manager knows where to look. */
 function Verdict({ item }: { item: ReviewItem }) {
   const check = item.dressCheck;
 
   if (!check || check.status === "queued" || check.status === "running") {
     return (
-      <p className="text-sm text-muted text-pretty">
-        The check is still running. It will usually settle on its own within a
-        minute — come back before deciding.
+      <p className="text-xs text-muted">
+        AI analysis in progress. Should settle in a few seconds.
       </p>
     );
   }
 
   if (check.status === "failed") {
     return (
-      <p className="text-sm text-muted text-pretty">
-        The check could not run on this photo, so there is no machine opinion.
-        Judge it yourself.
+      <p className="text-xs text-muted">
+        AI could not evaluate photo. Please judge manually from the image.
       </p>
     );
   }
@@ -135,20 +152,23 @@ function Verdict({ item }: { item: ReviewItem }) {
   const tone: Tone = check.verdict === "fail" ? "danger" : "warning";
 
   return (
-    <div className="space-y-2">
-      <p className="flex flex-wrap items-center gap-2">
-        <Pill tone={tone}>
-          {check.score !== null ? `${check.score}/100` : (check.verdict ?? "unknown")}
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill tone={tone} className="font-mono font-bold">
+          <ShieldAlert className="h-3 w-3 inline mr-1" />
+          {check.score !== null ? `${check.score}/100 Score` : (check.verdict ?? "Review")}
         </Pill>
-        {check.reason && <span className="text-sm text-muted text-pretty">{check.reason}</span>}
-      </p>
+        {check.reason && (
+          <span className="text-xs text-muted text-pretty">{check.reason}</span>
+        )}
+      </div>
 
       <ul className="flex flex-wrap gap-1.5">
         {ITEM_KEYS.map((key) => {
           const grade = (check.items?.[key] ?? "?") as ItemGrade;
           return (
             <li key={key}>
-              <Pill tone={gradeTone(grade)}>
+              <Pill tone={gradeTone(grade)} className="text-[11px]">
                 {ITEM_LABELS[key]}: {GRADE_LABELS[grade]}
               </Pill>
             </li>

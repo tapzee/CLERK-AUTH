@@ -51,15 +51,6 @@ export const GRADE_LABELS: Record<ItemGrade, string> = {
 /** How much credit each grade earns toward the score. */
 const GRADE_CREDIT: Record<Exclude<ItemGrade, "?">, number> = { g: 1, p: 0.5, n: 0 };
 
-/** Default spread across the five items, used when a cart has no uniform set. */
-export const DEFAULT_WEIGHTS: Record<ItemKey, number> = {
-  cap: 20,
-  apron: 20,
-  shirt: 25,
-  logo: 15,
-  neat: 20,
-};
-
 export const DEFAULT_PASS_SCORE = 70;
 
 export function parseGrade(value: unknown): ItemGrade {
@@ -67,20 +58,46 @@ export function parseGrade(value: unknown): ItemGrade {
 }
 
 /**
- * Coerces stored weights into a complete, sane set.
+ * Which items count toward the score, weighted equally.
  *
- * An all-zero set would make every check trivially pass, which is never what an
- * owner meant, so it falls back rather than silently rubber-stamping everyone.
+ * There is no number for an owner to set here. An item counts once its
+ * reference photo is uploaded -- uploading the photo *is* the configuration --
+ * so a business with no logo on its uniform simply never uploads a logo photo,
+ * and the logo is reported but never affects the score. "neat" (overall
+ * turnout) has no garment of its own and always counts, because it is read off
+ * the same photo regardless of what else was set up.
+ *
+ * The result reads as a percentage split (three counted items come back as 34,
+ * 33, 33) rather than as bare relative units, even though `scoreGrades` only
+ * needs the numbers to be proportionate -- a console showing "1%" next to an
+ * item that is fully counted would be a display bug wearing a scoring one's
+ * clothes.
  */
-export function normaliseWeights(raw: unknown): Record<ItemKey, number> {
-  const source = (raw ?? {}) as Record<string, unknown>;
-  const weights = {} as Record<ItemKey, number>;
+export function weightsFromReferences(
+  presentReferenceKinds: Iterable<ItemKey>,
+): Record<ItemKey, number> {
+  const present = new Set(presentReferenceKinds);
 
-  for (const key of ITEM_KEYS) {
-    const value = Number(source[key]);
-    weights[key] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
-  }
-  return ITEM_KEYS.some((key) => weights[key] > 0) ? weights : { ...DEFAULT_WEIGHTS };
+  // A brand-new uniform has no reference photos yet and still needs a
+  // meaningful score, so nothing is silently zeroed out before an owner has
+  // had the chance to upload anything.
+  const noPhotosYet = REFERENCE_KEYS.every((key) => !present.has(key));
+  const counted = ITEM_KEYS.filter(
+    (key) => key === "neat" || noPhotosYet || present.has(key),
+  );
+
+  const weights = {} as Record<ItemKey, number>;
+  for (const key of ITEM_KEYS) weights[key] = 0;
+
+  // Spread 100 as evenly as the count allows, e.g. three items become
+  // 34/33/33 rather than three thirds that could never add back up to 100.
+  const share = Math.floor(100 / counted.length);
+  const remainder = 100 - share * counted.length;
+  counted.forEach((key, index) => {
+    weights[key] = share + (index < remainder ? 1 : 0);
+  });
+
+  return weights;
 }
 
 export type Grades = Record<ItemKey, ItemGrade>;

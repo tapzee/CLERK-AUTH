@@ -2,24 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Camera,
+  RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
+  MapPin,
+  Clock,
+  Eye,
+  ShieldCheck,
+} from "lucide-react";
 
 import { checkGeofence, formatDistance } from "@/lib/attendance/geofence";
 import type { AttendanceStatus, PunchKind } from "@/lib/attendance/types";
+import type { CaptureMethod } from "@/lib/geo";
 import { captureFrame } from "@/lib/image";
 import { isFixFresh, useGeolocation } from "@/lib/hooks/useGeolocation";
+import { useBlinkCapture, type BlinkState } from "@/lib/hooks/useBlinkCapture";
+import { usePersistedBoolean } from "@/lib/hooks/usePersistedBoolean";
 import { ITEM_NOUNS, ITEM_KEYS, type ItemGrade } from "@/lib/uniform/items";
 import { Card, Dot, Pill } from "@/components/ui/primitives";
 
 import { TodaysPunches } from "./TodaysPunches";
-
-/**
- * Sign in, stand at the cart, take a selfie. That is the whole worker-facing
- * product.
- *
- * The one thing that makes this more than a camera is the refusal path: a
- * check-in that fails the uniform check never becomes a punch, so the screen
- * has to say exactly what is wrong and put the camera straight back up.
- */
 
 type Phase =
   | { kind: "idle" }
@@ -31,13 +35,14 @@ type Phase =
   | { kind: "done"; message: string; tone: "success" | "warning" }
   | { kind: "error"; message: string };
 
-type Shot = { previewUrl: string; blob: Blob; width: number; height: number };
+type Shot = { previewUrl: string; blob: Blob; width: number; height: number; method: CaptureMethod };
 
 const LABEL: Record<PunchKind, string> = { in: "Check in", out: "Check out" };
 
-/** How long to keep re-asking the server while a verdict is still pending. */
 const VERDICT_POLL_MS = 2500;
 const VERDICT_POLL_LIMIT = 8;
+
+const BLINK_PREFERENCE_KEY = "shift:blink-to-capture";
 
 export function PunchScreen({ status }: { status: AttendanceStatus }) {
   const router = useRouter();
@@ -47,9 +52,8 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [shot, setShot] = useState<Shot | null>(null);
   const [polls, setPolls] = useState(0);
+  const [blinkEnabled, toggleBlink] = usePersistedBoolean(BLINK_PREFERENCE_KEY);
 
-  // Watched for the whole page, not just while the camera is open, so the
-  // geofence verdict is already settled by the time the shutter fires.
   const geo = useGeolocation(true);
 
   const { worker, events, nextKind } = status;
@@ -65,9 +69,6 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     cart,
   );
 
-  // A verdict that could not be settled inline lands a second or two later, on
-  // a background worker. Rather than hold the request open for it, the page
-  // asks again until it settles, then stops.
   const awaitingVerdict = events.some((event) =>
     ["queued", "running", "failed"].includes(event.dressCheck?.status ?? ""),
   );
@@ -130,26 +131,39 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     }
   }, [stopStream]);
 
-  const capture = useCallback(async () => {
-    const video = videoRef.current;
-    if (!video) return;
+  const capture = useCallback(
+    async (method: CaptureMethod = "manual") => {
+      const video = videoRef.current;
+      if (!video) return;
 
-    // One frame serves both the manager's review and the uniform check.
-    const frame = await captureFrame(video);
-    if (!frame) {
-      setPhase({ kind: "error", message: "Could not read a frame from the camera." });
-      return;
-    }
+      const frame = await captureFrame(video);
+      if (!frame) {
+        setPhase({ kind: "error", message: "Could not read a frame from the camera." });
+        return;
+      }
 
-    stopStream();
-    setShot({
-      previewUrl: URL.createObjectURL(frame.blob),
-      blob: frame.blob,
-      width: frame.width,
-      height: frame.height,
-    });
-    setPhase({ kind: "review" });
-  }, [stopStream]);
+      stopStream();
+      setShot({
+        previewUrl: URL.createObjectURL(frame.blob),
+        blob: frame.blob,
+        width: frame.width,
+        height: frame.height,
+        method,
+      });
+      setPhase({ kind: "review" });
+    },
+    [stopStream],
+  );
+
+  const captureOnBlink = useCallback(() => {
+    void capture("blink");
+  }, [capture]);
+
+  const blink = useBlinkCapture({
+    videoRef,
+    enabled: blinkEnabled && phase.kind === "live",
+    onTrigger: captureOnBlink,
+  });
 
   const retake = useCallback(() => {
     if (shot) URL.revokeObjectURL(shot.previewUrl);
@@ -167,6 +181,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     form.append("width", String(shot.width));
     form.append("height", String(shot.height));
     form.append("capturedAt", new Date().toISOString());
+    form.append("captureMethod", shot.method);
 
     if (fresh) {
       form.append("latitude", String(fresh.latitude));
@@ -182,9 +197,6 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
       const body = await response.json().catch(() => ({}));
 
       if (response.status === 422 && body.uniform) {
-        // The uniform check refused it. The photo is dropped and the camera
-        // goes straight back up -- the whole point is that they fix it and
-        // try again, not that they read an error and wonder what to do.
         URL.revokeObjectURL(shot.previewUrl);
         setShot(null);
         setPhase({
@@ -217,12 +229,21 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
       <WorkerCard worker={worker} />
       <GeofenceBar fence={fence} cartName={cart.name} geo={geo} />
 
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black/90 sm:aspect-[4/3]">
+      {/* Futuristic Viewfinder HUD */}
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl border border-border/80 bg-neutral-950 shadow-2xl sm:aspect-[4/3]">
+        {/* HUD Corner Brackets */}
+        <div className="pointer-events-none absolute inset-4 z-10">
+          <div className="absolute top-0 left-0 h-4 w-4 border-t-2 border-l-2 border-white/50 rounded-tl" />
+          <div className="absolute top-0 right-0 h-4 w-4 border-t-2 border-r-2 border-white/50 rounded-tr" />
+          <div className="absolute bottom-0 left-0 h-4 w-4 border-b-2 border-l-2 border-white/50 rounded-bl" />
+          <div className="absolute bottom-0 right-0 h-4 w-4 border-b-2 border-r-2 border-white/50 rounded-br" />
+        </div>
+
         {shot ? (
-          // eslint-disable-next-line @next/next/no-img-element -- blob: preview, not a remote asset
+          // eslint-disable-next-line @next/next/no-img-element -- blob: preview
           <img
             src={shot.previewUrl}
-            alt="The photo that will be attached to this punch"
+            alt="Check-in preview"
             className="h-full w-full object-contain"
           />
         ) : (
@@ -231,32 +252,61 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
             playsInline
             muted
             className="h-full w-full object-cover"
-            // Mirrored for the viewer only; the saved frame is not flipped.
             style={{ transform: "scaleX(-1)" }}
           />
         )}
 
+        {/* Live scanning line effect */}
+        {phase.kind === "live" && !shot && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-accent to-transparent opacity-75 animate-scanline" />
+        )}
+
         {!shot && phase.kind !== "live" && (
-          <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/70">
-            {phase.kind === "starting" ? "Starting camera…" : "Camera is off"}
+          <div className="absolute inset-0 grid place-items-center bg-black/40 px-6 text-center backdrop-blur-[2px]">
+            <div className="space-y-2">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/10 text-white/90 backdrop-blur-md">
+                <Camera className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-medium text-white/90">
+                {phase.kind === "starting"
+                  ? "Starting camera…"
+                  : fence.ok
+                    ? `Ready to ${LABEL[nextKind].toLowerCase()}`
+                    : "Camera opens once you are at the cart"}
+              </p>
+              <p className="text-xs text-white/60">
+                {fence.ok ? "Ensure cap and apron are clearly visible" : "Move within the cart radius"}
+              </p>
+            </div>
           </div>
         )}
 
         {busy && (
-          <div className="absolute inset-0 grid place-items-center bg-black/70 px-6 text-center">
-            <div>
-              <p className="text-sm font-medium text-white">Checking your uniform…</p>
-              <p className="mt-1 text-xs text-white/70">This takes a couple of seconds.</p>
+          <div className="absolute inset-0 grid place-items-center bg-black/75 px-6 text-center backdrop-blur-md">
+            <div className="space-y-3">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent/20 text-accent">
+                <ShieldCheck className="h-6 w-6 animate-pulse" />
+              </div>
+              <p className="text-sm font-semibold text-white">Analyzing Uniform with Vision AI…</p>
+              <p className="text-xs text-white/70">Verifying apron, cap, and logo in real-time</p>
             </div>
           </div>
+        )}
+
+        {!shot && phase.kind === "live" && blinkEnabled && (
+          <BlinkOverlay blink={blink} />
         )}
       </div>
 
       {nextKind === "in" && !shot && phase.kind !== "rejected" && (
         <p className="text-xs text-muted text-pretty">
-          Stand back far enough that your cap and apron are in frame — the uniform
+          💡 Stand back far enough that your cap and apron are in frame — the uniform
           check reads this photo.
         </p>
+      )}
+
+      {!shot && (phase.kind === "idle" || phase.kind === "live") && (
+        <BlinkToggle enabled={blinkEnabled} onChange={toggleBlink} armed={phase.kind === "live"} />
       )}
 
       {phase.kind === "rejected" && <RejectionNotice phase={phase} />}
@@ -273,21 +323,23 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
       />
 
       {phase.kind === "error" && (
-        <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
-          {phase.message}
-        </p>
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-danger/30 bg-danger-soft p-4 text-xs font-medium text-danger">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{phase.message}</span>
+        </div>
       )}
       {phase.kind === "done" && (
-        <p
+        <div
           role="status"
-          className={`rounded-lg px-4 py-3 text-sm ${
+          className={`flex items-start gap-2.5 rounded-xl p-4 text-xs font-medium ${
             phase.tone === "success"
-              ? "bg-success-soft text-success"
-              : "bg-warning-soft text-warning"
+              ? "border border-success/30 bg-success-soft text-success"
+              : "border border-warning/30 bg-warning-soft text-warning"
           }`}
         >
-          {phase.message}
-        </p>
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{phase.message}</span>
+        </div>
       )}
 
       <TodaysPunches events={events} />
@@ -295,13 +347,12 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
   );
 }
 
-/** The sentence shown after a successful punch. */
 function confirmation(
   kind: PunchKind,
   event: { lateByMinutes?: number | null; isLate?: boolean } | undefined,
 ): { message: string; tone: "success" | "warning" } {
   if (kind === "out") {
-    return { message: "Checked out. See you tomorrow.", tone: "success" };
+    return { message: "Checked out successfully. Have a great evening!", tone: "success" };
   }
 
   if (event?.isLate) {
@@ -311,12 +362,10 @@ function confirmation(
     };
   }
 
-  // Inside the grace window still counts as on time, which is worth saying so
-  // nobody thinks a few minutes cost them.
   return {
     message: event?.lateByMinutes
-      ? `Checked in on time — ${event.lateByMinutes} min after your shift start, inside your grace window.`
-      : "Checked in on time.",
+      ? `Checked in on time — ${event.lateByMinutes}m after shift start, within your grace allowance.`
+      : "Checked in on time. Uniform verified!",
     tone: "success",
   };
 }
@@ -325,17 +374,27 @@ function WorkerCard({ worker }: { worker: AttendanceStatus["worker"] }) {
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="font-medium">{worker.fullName}</p>
-        <p className="text-sm text-muted">{worker.cart.name}</p>
+        <div className="flex items-center gap-2">
+          <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-xs font-bold text-accent">
+            {worker.fullName.charAt(0)}
+          </div>
+          <p className="font-semibold text-foreground">{worker.fullName}</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted">
+          <MapPin className="h-3.5 w-3.5 text-accent" />
+          <span>{worker.cart.name}</span>
+        </div>
       </div>
       {worker.shiftStart ? (
-        <p className="mt-1 text-xs text-muted">
-          Shift {worker.shiftStart.slice(0, 5)}
-          {worker.shiftEnd ? ` – ${worker.shiftEnd.slice(0, 5)}` : ""} · late after{" "}
-          {worker.graceMinutes} min
-        </p>
+        <div className="mt-2.5 flex items-center gap-2 text-xs text-muted">
+          <Clock className="h-3.5 w-3.5" />
+          <span>
+            Shift {worker.shiftStart.slice(0, 5)}
+            {worker.shiftEnd ? ` – ${worker.shiftEnd.slice(0, 5)}` : ""} · {worker.graceMinutes}m grace
+          </span>
+        </div>
       ) : (
-        <p className="mt-1 text-xs text-muted">No shift set — nothing is counted late.</p>
+        <p className="mt-2 text-xs text-muted">No scheduled shift — lateness not docked.</p>
       )}
     </Card>
   );
@@ -352,28 +411,33 @@ function GeofenceBar({
 }) {
   return (
     <div
-      className={`flex items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm ${
-        fence.ok ? "border-success/30 bg-success-soft" : "border-border bg-surface-muted"
+      className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs transition-all duration-200 sm:text-sm ${
+        fence.ok
+          ? "border-success/30 bg-success-soft/70 text-foreground"
+          : "border-border bg-surface-glass text-muted"
       }`}
     >
-      <Dot tone={fence.ok ? "success" : "neutral"} />
-      <span className="text-pretty">
-        {fence.ok
-          ? `At ${cartName} — ${formatDistance(fence.distanceM ?? 0)} from the pin.`
-          : geo.status === "locating"
-            ? "Getting your location…"
-            : (fence.reason ?? "Location unavailable.")}
-      </span>
-      {geo.status === "denied" && (
-        <button onClick={geo.retry} className="ml-auto shrink-0 text-xs underline">
-          retry
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Dot tone={fence.ok ? "success" : "neutral"} pulse={fence.ok} />
+        <span className="truncate text-pretty">
+          {fence.ok
+            ? `At ${cartName} (${formatDistance(fence.distanceM ?? 0)} from cart)`
+            : geo.status === "locating"
+              ? "Triangulating GPS location…"
+              : (fence.reason ?? "Location unavailable.")}
+        </span>
+      </div>
+      {geo.status === "denied" ? (
+        <button onClick={geo.retry} className="shrink-0 font-medium text-accent underline">
+          Retry GPS
         </button>
-      )}
+      ) : fence.ok ? (
+        <span className="shrink-0 text-[11px] font-semibold text-success">Verified</span>
+      ) : null}
     </div>
   );
 }
 
-/** What was wrong, item by item, so there is nothing to guess at. */
 function RejectionNotice({
   phase,
 }: {
@@ -386,7 +450,10 @@ function RejectionNotice({
 
   return (
     <div role="alert" className="rounded-2xl border border-danger/30 bg-danger-soft p-4">
-      <p className="text-sm font-medium text-danger text-pretty">{phase.message}</p>
+      <div className="flex items-center gap-2 text-danger font-semibold text-sm">
+        <AlertTriangle className="h-4 w-4" />
+        <span>{phase.message}</span>
+      </div>
 
       {problems.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5">
@@ -394,8 +461,8 @@ function RejectionNotice({
             <li key={item.key}>
               <Pill tone="danger">
                 {item.grade === "n"
-                  ? `No ${ITEM_NOUNS[item.key]}`
-                  : `${ITEM_NOUNS[item.key]} worn badly`}
+                  ? `Missing ${ITEM_NOUNS[item.key]}`
+                  : `${ITEM_NOUNS[item.key]} not worn correctly`}
               </Pill>
             </li>
           ))}
@@ -403,13 +470,12 @@ function RejectionNotice({
       )}
 
       <p className="mt-3 text-xs text-danger/80 text-pretty">
-        Nothing has been recorded. Fix your uniform and take the photo again.
+        Adjust your uniform and retake your selfie to complete your check-in.
       </p>
     </div>
   );
 }
 
-/** The one button that matters, in whichever state the screen is in. */
 function Actions({
   phase,
   hasShot,
@@ -434,11 +500,21 @@ function Actions({
   if (hasShot) {
     return (
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={onSubmit} disabled={busy || !canPunch} className="btn btn-primary">
-          {busy ? "Checking…" : LABEL[nextKind]}
+        <button
+          onClick={onSubmit}
+          disabled={busy || !canPunch}
+          className="btn btn-primary flex-1 py-3 text-base shadow-md sm:flex-initial"
+        >
+          <ShieldCheck className="h-4 w-4" />
+          <span>{busy ? "Analyzing…" : `Confirm ${LABEL[nextKind]}`}</span>
         </button>
-        <button onClick={onRetake} disabled={busy} className="btn btn-ghost">
-          Retake
+        <button
+          onClick={onRetake}
+          disabled={busy}
+          className="btn btn-ghost py-3"
+        >
+          <RotateCcw className="h-4 w-4" />
+          <span>Retake</span>
         </button>
       </div>
     );
@@ -446,8 +522,12 @@ function Actions({
 
   if (phase.kind === "live") {
     return (
-      <button onClick={onCapture} className="btn btn-primary w-full py-3 sm:w-auto">
-        Take photo
+      <button
+        onClick={() => onCapture()}
+        className="btn btn-primary w-full py-3.5 text-base shadow-lg shadow-accent/20"
+      >
+        <Camera className="h-5 w-5" />
+        <span>Capture photo</span>
       </button>
     );
   }
@@ -456,10 +536,80 @@ function Actions({
     <button
       onClick={onStart}
       disabled={!canPunch}
-      title={canPunch ? undefined : "You have to be at the cart to punch."}
-      className="btn btn-primary w-full py-3 sm:w-auto"
+      title={canPunch ? undefined : "You must be at the cart to punch."}
+      className="btn btn-primary w-full py-3.5 text-base shadow-lg shadow-accent/20"
     >
-      {phase.kind === "rejected" ? "Try again" : LABEL[nextKind]}
+      <Camera className="h-5 w-5" />
+      <span>{phase.kind === "rejected" ? "Try again" : `Open Camera (${LABEL[nextKind]})`}</span>
     </button>
+  );
+}
+
+function BlinkToggle({
+  enabled,
+  armed,
+  onChange,
+}: {
+  enabled: boolean;
+  armed: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-3 rounded-2xl border border-border/80 bg-surface-glass p-3.5 text-sm transition hover:border-border cursor-pointer">
+      <div className="mt-0.5 grid h-6 w-6 place-items-center rounded-lg bg-accent-soft text-accent">
+        <Eye className="h-3.5 w-3.5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold text-xs text-foreground sm:text-sm">Blink to Capture 👁️</span>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => onChange(event.target.checked)}
+            className="h-4 w-4 accent-accent rounded cursor-pointer"
+          />
+        </div>
+        <p className="mt-0.5 text-xs text-muted text-pretty">
+          {enabled && !armed
+            ? "Ready — open camera and hold your eyes shut for 1s to capture automatically."
+            : "Hold eyes shut for 1 second and the camera captures on open."}
+        </p>
+      </div>
+    </label>
+  );
+}
+
+function BlinkOverlay({ blink }: { blink: BlinkState }) {
+  const label =
+    blink.status === "loading"
+      ? "Loading face detection model…"
+      : blink.status === "error"
+        ? (blink.error ?? "Blink detection unavailable — use the button")
+        : blink.cooling
+          ? "Captured! Processing photo…"
+          : !blink.faceDetected
+            ? "Looking for your face…"
+            : blink.holdProgress > 0
+              ? "Hold eyes closed…"
+              : "Ready — hold eyes shut to capture";
+
+  return (
+    <div className="absolute inset-x-4 bottom-4 space-y-2 z-20">
+      <div className="flex items-center justify-between rounded-full bg-black/75 px-4 py-2 text-xs text-white backdrop-blur-md shadow-lg">
+        <div className="flex items-center gap-2">
+          <Dot tone={blink.faceDetected ? "success" : "neutral"} pulse={blink.faceDetected} />
+          <span className="font-medium">{label}</span>
+        </div>
+        {blink.faceDetected && (
+          <span className="font-mono text-[10px] text-white/70">AI Locked</span>
+        )}
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/20 backdrop-blur">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-amber-400 to-accent transition-all duration-100 ease-out"
+          style={{ width: `${Math.round(blink.holdProgress * 100)}%` }}
+        />
+      </div>
+    </div>
   );
 }

@@ -2,6 +2,15 @@
 
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Banknote,
+  CheckCircle2,
+  XCircle,
+  Calendar,
+  Send,
+  AlertCircle,
+  CreditCard,
+} from "lucide-react";
 
 import {
   decidePayrollAction,
@@ -14,15 +23,6 @@ import { formatMoney, formatMonth } from "@/lib/payroll/calculate";
 import { Card, EmptyState, Pill, type Tone } from "@/components/ui/primitives";
 import { FormFeedback, SubmitButton } from "@/components/ui/form";
 
-/**
- * One month of pay: what attendance says, what was sent for approval, and what
- * the owner decided.
- *
- * `live` and `run` are shown side by side on purpose. A run freezes its figures
- * when it is prepared, so if somebody's salary or attendance changed afterwards
- * the two disagree -- and that disagreement is exactly what a manager needs to
- * see before chasing an approval for a stale number.
- */
 export function PayrollBoard({
   lines,
   months,
@@ -41,13 +41,14 @@ export function PayrollBoard({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted">Month</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <Calendar className="h-4 w-4 text-accent" />
+          <span className="text-muted text-xs uppercase tracking-wider">Payroll Month</span>
           <select
             value={month}
             onChange={(event) => router.push(`/manage/payroll?month=${event.target.value}`)}
-            className="input w-auto"
+            className="input w-auto font-mono text-xs font-semibold py-1.5"
           >
             {months.map((key) => (
               <option key={key} value={key}>
@@ -61,22 +62,32 @@ export function PayrollBoard({
       </div>
 
       {unpaid.length > 0 && (
-        <p className="rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning text-pretty">
-          {unpaid.length} {unpaid.length === 1 ? "person has" : "people have"} no salary
-          set, so nothing can be prepared for them. Set one on the Staff screen.
-        </p>
+        <div className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning-soft p-3.5 text-xs text-warning">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {unpaid.length} {unpaid.length === 1 ? "worker has" : "workers have"} no monthly salary set.
+            Configure salaries on the Staff tab to include them in payroll.
+          </span>
+        </div>
       )}
 
       {canApprove && pendingApproval.length > 0 && (
-        <p className="rounded-lg bg-accent-soft px-4 py-3 text-sm text-accent text-pretty">
-          {pendingApproval.length} {pendingApproval.length === 1 ? "payment is" : "payments are"}{" "}
-          waiting on your approval, totalling{" "}
-          {formatMoney(pendingApproval.reduce((sum, line) => sum + (line.run?.net ?? 0), 0))}.
-        </p>
+        <div className="flex items-start gap-2.5 rounded-xl border border-accent/30 bg-accent-soft p-3.5 text-xs text-accent">
+          <Banknote className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {pendingApproval.length} {pendingApproval.length === 1 ? "payment is" : "payments are"}{" "}
+            waiting for your approval, totalling{" "}
+            <strong>{formatMoney(pendingApproval.reduce((sum, line) => sum + (line.run?.net ?? 0), 0))}</strong>.
+          </span>
+        </div>
       )}
 
       {lines.length === 0 ? (
-        <EmptyState title="Nobody to pay" body="Enrol staff and set their salary first." />
+        <EmptyState
+          icon={<Banknote className="h-5 w-5" />}
+          title="No payroll entries"
+          body="Enrol staff and assign their base salary to generate monthly payroll."
+        />
       ) : (
         <ul className="space-y-3">
           {lines.map((line) => (
@@ -90,7 +101,6 @@ export function PayrollBoard({
   );
 }
 
-/** Sends every eligible person for this month in one go. */
 function PrepareAll({ lines, month }: { lines: PayrollLine[]; month: string }) {
   const [state, action] = useActionState<ActionState, FormData>(preparePayrollAction, IDLE);
 
@@ -109,8 +119,12 @@ function PrepareAll({ lines, month }: { lines: PayrollLine[]; month: string }) {
       ))}
 
       <FormFeedback state={state} />
-      <SubmitButton pendingLabel="Preparing…" disabled={eligible.length === 0}>
-        Prepare {eligible.length > 0 ? `${eligible.length} ` : ""}for approval
+      <SubmitButton
+        pendingLabel="Preparing…"
+        disabled={eligible.length === 0}
+        icon={<Send className="h-3.5 w-3.5" />}
+      >
+        Prepare {eligible.length > 0 ? `${eligible.length} ` : ""}for Approval
       </SubmitButton>
     </form>
   );
@@ -124,7 +138,7 @@ const STATUS_TONE: Record<RunStatus, Tone> = {
 };
 
 const STATUS_LABEL: Record<RunStatus, string> = {
-  pending: "Waiting for approval",
+  pending: "Waiting Approval",
   approved: "Approved",
   declined: "Declined",
   paid: "Paid",
@@ -141,8 +155,6 @@ function PayrollRow({
 }) {
   const { staff, run, live } = line;
 
-  // The frozen run is the truth once one exists; `live` is what would be
-  // prepared today.
   const shown = run ?? {
     daysPresent: line.daysPresent,
     daysLate: line.daysLate,
@@ -151,13 +163,6 @@ function PayrollRow({
     net: live.net,
   };
 
-  /*
-   * A prepared run whose inputs have moved on.
-   *
-   * Only worth flagging while it is still pending: once an owner has approved
-   * or declined it, the frozen figures are the decision they made and later
-   * attendance is next month's problem.
-   */
   const stale =
     run !== null &&
     run.status === "pending" &&
@@ -166,27 +171,36 @@ function PayrollRow({
       run.net !== live.net);
 
   return (
-    <Card className="p-4">
+    <Card className="p-4 transition-all hover:border-border">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0">
-          <p className="font-medium">{staff.fullName}</p>
-          <p className="mt-0.5 text-xs text-muted">
-            {staff.monthlySalary === null
-              ? "No salary set"
-              : `${formatMoney(staff.monthlySalary)}/month ÷ ${staff.workingDaysPerMonth} days`}
-          </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent text-sm font-bold">
+            {staff.fullName.charAt(0)}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-foreground text-sm sm:text-base">{staff.fullName}</p>
+            <p className="mt-0.5 text-xs text-muted font-mono">
+              {staff.monthlySalary === null
+                ? "No salary configured"
+                : `${formatMoney(staff.monthlySalary)}/mo ÷ ${staff.workingDaysPerMonth} days`}
+            </p>
+          </div>
         </div>
 
         <div className="text-right">
-          <p className="text-lg font-semibold tabular-nums">{formatMoney(shown.net)}</p>
-          {run && <Pill tone={STATUS_TONE[run.status]}>{STATUS_LABEL[run.status]}</Pill>}
+          <p className="text-xl font-bold tabular-nums text-foreground">{formatMoney(shown.net)}</p>
+          {run ? (
+            <Pill tone={STATUS_TONE[run.status]}>{STATUS_LABEL[run.status]}</Pill>
+          ) : (
+            <Pill tone="neutral">Unprepared</Pill>
+          )}
         </div>
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <Figure label="Days present" value={String(shown.daysPresent)} />
+      <dl className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-surface-muted/40 p-3 text-xs sm:grid-cols-4">
+        <Figure label="Days Present" value={String(shown.daysPresent)} />
         <Figure
-          label="Days late"
+          label="Days Late"
           value={String(shown.daysLate)}
           tone={shown.daysLate > 0 ? "warning" : "neutral"}
         />
@@ -199,14 +213,17 @@ function PayrollRow({
       </dl>
 
       {stale && (
-        <p className="mt-3 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning text-pretty">
-          Attendance or salary has changed since this was prepared — it would now
-          come to {formatMoney(live.net)}. Prepare it again to refresh the figures.
-        </p>
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning-soft p-2.5 text-xs text-warning">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Attendance updated since this run was prepared (now {formatMoney(live.net)}).
+            Re-prepare to sync figures.
+          </span>
+        </div>
       )}
 
       {run?.note && (
-        <p className="mt-3 text-xs text-muted text-pretty">Note: {run.note}</p>
+        <p className="mt-2.5 text-xs text-muted text-pretty">Note: {run.note}</p>
       )}
 
       {canApprove && run && <Decision run={run} month={month} />}
@@ -233,13 +250,12 @@ function Figure({
 
   return (
     <div>
-      <dt className="label mb-0.5">{label}</dt>
-      <dd className={`tabular-nums ${colour[tone]}`}>{value}</dd>
+      <dt className="label mb-0.5 text-[10px]">{label}</dt>
+      <dd className={`font-mono font-semibold text-xs tabular-nums ${colour[tone]}`}>{value}</dd>
     </div>
   );
 }
 
-/** The owner's controls: approve, decline, or record that it has been paid. */
 function Decision({
   run,
   month,
@@ -255,18 +271,33 @@ function Decision({
 
   if (run.status === "pending") {
     return (
-      <form action={decide} className="mt-4 space-y-3 border-t border-border pt-3">
+      <form action={decide} className="mt-4 space-y-3 border-t border-border/60 pt-3">
         <input type="hidden" name="runId" value={run.id} />
         <input type="hidden" name="periodMonth" value={month} />
 
-        <input name="note" placeholder="Reason (optional)" className="input" />
+        <input
+          name="note"
+          placeholder="Sign-off note or reason (optional)"
+          className="input text-xs"
+        />
         <FormFeedback state={decideState} />
 
         <div className="flex flex-wrap gap-2.5">
-          <SubmitButton name="decision" value="approved" pendingLabel="Approving…">
+          <SubmitButton
+            name="decision"
+            value="approved"
+            pendingLabel="Approving…"
+            icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+          >
             Approve {formatMoney(run.net)}
           </SubmitButton>
-          <SubmitButton name="decision" value="declined" variant="danger" pendingLabel="Declining…">
+          <SubmitButton
+            name="decision"
+            value="declined"
+            variant="danger"
+            pendingLabel="Declining…"
+            icon={<XCircle className="h-3.5 w-3.5" />}
+          >
             Decline
           </SubmitButton>
         </div>
@@ -276,11 +307,15 @@ function Decision({
 
   if (run.status === "approved") {
     return (
-      <form action={pay} className="mt-4 space-y-3 border-t border-border pt-3">
+      <form action={pay} className="mt-4 space-y-3 border-t border-border/60 pt-3">
         <input type="hidden" name="runId" value={run.id} />
         <FormFeedback state={paidState} />
-        <SubmitButton variant="ghost" pendingLabel="Saving…">
-          Mark as paid
+        <SubmitButton
+          variant="ghost"
+          pendingLabel="Recording…"
+          icon={<CreditCard className="h-3.5 w-3.5 text-success" />}
+        >
+          Mark as Paid
         </SubmitButton>
       </form>
     );

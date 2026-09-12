@@ -1,6 +1,18 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  Store,
+  MapPin,
+  Navigation,
+  Crosshair,
+  Users,
+  Shirt,
+  Plus,
+  Edit3,
+  AlertTriangle,
+  Radio,
+} from "lucide-react";
 
 import { saveCartAction } from "@/app/manage/actions";
 import { IDLE, type ActionState } from "@/lib/manage/action-state";
@@ -9,14 +21,6 @@ import type { UniformRecord } from "@/lib/manage/uniforms";
 import { MAX_ACCURACY_M } from "@/lib/attendance/geofence";
 import { Card, EmptyState, Field, Pill, SectionHeading } from "@/components/ui/primitives";
 import { FormFeedback, SubmitButton } from "@/components/ui/form";
-
-/**
- * Carts and their geofence.
- *
- * The pin can be typed or captured by standing at the cart and pressing "use my
- * location", which is how a manager who has never seen a coordinate in their
- * life sets one correctly.
- */
 
 type Editing = { cart: CartRecord | null } | null;
 
@@ -35,12 +39,13 @@ export function CartManager({
   return (
     <section className="space-y-4">
       <SectionHeading
-        title="Carts"
-        description="A punch only counts inside the circle you set here."
+        title="Food Carts &amp; Geofences"
+        description="Punches are verified against the precise GPS radius defined for each location."
         action={
           canCreate ? (
             <button onClick={() => setEditing({ cart: null })} className="btn btn-primary">
-              Add cart
+              <Plus className="h-4 w-4" />
+              <span>Add cart</span>
             </button>
           ) : undefined
         }
@@ -57,40 +62,60 @@ export function CartManager({
 
       {carts.length === 0 ? (
         <EmptyState
-          title="No carts yet"
+          icon={<Store className="h-5 w-5" />}
+          title="No carts configured yet"
           body={
             canCreate
-              ? "Add your first cart, then stand at it and press “use my location” to drop the pin."
-              : "An owner has to add a cart before you can manage one."
+              ? "Add your first cart, then stand at it and click “Use my location” to drop the pin."
+              : "An owner must add a cart before you can manage one."
           }
         />
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {carts.map((cart) => (
             <li key={cart.id}>
-              <Card className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 font-medium">
-                    {cart.name}
-                    {!cart.active && <Pill tone="neutral">Inactive</Pill>}
-                  </p>
-                  <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
-                    <span className="font-mono">
-                      {cart.latitude.toFixed(5)}, {cart.longitude.toFixed(5)}
-                    </span>
-                    <span>{cart.radiusM}m radius</span>
-                    <span>
-                      {cart.staffCount} {cart.staffCount === 1 ? "person" : "people"}
-                    </span>
-                    <span>
-                      {cart.uniformProfileId
-                        ? (uniformName.get(cart.uniformProfileId) ?? "Unknown uniform")
-                        : "Default uniform"}
-                    </span>
-                  </p>
+              <Card className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-4 transition-all hover:border-border">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">
+                    <Store className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-foreground text-sm sm:text-base">
+                        {cart.name}
+                      </p>
+                      {!cart.active && <Pill tone="neutral">Inactive</Pill>}
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-surface-muted px-2 py-0.5 rounded-md">
+                        <MapPin className="h-3 w-3 text-accent" />
+                        {cart.latitude.toFixed(5)}, {cart.longitude.toFixed(5)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Radio className="h-3 w-3 text-accent" />
+                        {cart.radiusM}m radius
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Users className="h-3 w-3 text-accent" />
+                        {cart.staffCount} {cart.staffCount === 1 ? "staff" : "staff"}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Shirt className="h-3 w-3 text-accent" />
+                        {cart.uniformProfileId
+                          ? (uniformName.get(cart.uniformProfileId) ?? "Unknown uniform")
+                          : "Default uniform"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <button onClick={() => setEditing({ cart })} className="btn btn-ghost">
-                  Edit
+
+                <button
+                  onClick={() => setEditing({ cart })}
+                  className="btn btn-ghost px-3 py-1.5 text-xs sm:text-sm"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  <span>Edit</span>
                 </button>
               </Card>
             </li>
@@ -115,15 +140,7 @@ function CartForm({
   const latitudeRef = useRef<HTMLInputElement>(null);
   const longitudeRef = useRef<HTMLInputElement>(null);
 
-  /*
-   * Whether the coordinates actually changed.
-   *
-   * The pin's timestamp is an audit trail for "when did this cart move", so
-   * renaming a cart must not refresh it. Tracked here rather than compared on
-   * the server, where the old value would have to be re-read first.
-   */
   const [pinMoved, setPinMoved] = useState(false);
-
   const [locating, setLocating] = useState(false);
   const [fix, setFix] = useState<{ accuracyM: number } | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -132,16 +149,9 @@ function CartForm({
     if (state.ok) onDone();
   }, [state.ok, onDone]);
 
-  /*
-   * Drops the pin where the manager is standing.
-   *
-   * A single request rather than the watcher the punch screen uses: a cart is
-   * placed once, and holding a position watch open for a form that is about to
-   * close would keep the GPS radio busy for no reason.
-   */
   function dropPin() {
     if (!navigator.geolocation) {
-      setGeoError("This device cannot report its location. Type the coordinates instead.");
+      setGeoError("This device cannot report GPS location. Type coordinates manually.");
       return;
     }
 
@@ -150,8 +160,6 @@ function CartForm({
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        // Written straight to the inputs rather than held in state, so the
-        // manager can still correct them by hand afterwards.
         if (latitudeRef.current) {
           latitudeRef.current.value = position.coords.latitude.toFixed(6);
         }
@@ -166,8 +174,8 @@ function CartForm({
       (error) => {
         setGeoError(
           error.code === error.PERMISSION_DENIED
-            ? "Location permission was denied. Allow it, or type the coordinates in."
-            : "Could not get a location fix. Try again outdoors, or type the coordinates in.",
+            ? "Location permission was denied. Allow it or enter coordinates manually."
+            : "Could not obtain accurate GPS fix. Try outdoors or enter coordinates manually.",
         );
         setLocating(false);
       },
@@ -178,37 +186,60 @@ function CartForm({
   const coarse = fix !== null && fix.accuracyM > MAX_ACCURACY_M;
 
   return (
-    <Card className="p-4">
+    <Card className="border-accent/30 p-5 shadow-lg">
+      <div className="mb-4 flex items-center justify-between border-b border-border/70 pb-3">
+        <p className="font-bold text-base text-foreground">
+          {cart ? `Edit Cart · ${cart.name}` : "Configure New Food Cart"}
+        </p>
+      </div>
+
       <form action={action} className="space-y-5">
         {cart && <input type="hidden" name="id" value={cart.id} />}
         <input type="hidden" name="pinMoved" value={String(pinMoved)} />
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Cart name">
-            <input name="name" defaultValue={cart?.name ?? ""} required className="input" />
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <Field label="Cart Location Name">
+            <input
+              name="name"
+              defaultValue={cart?.name ?? ""}
+              required
+              placeholder="e.g. Connaught Place Cart #1"
+              className="input"
+            />
           </Field>
-          <Field label="Timezone" hint="The day and lateness are worked out in this zone.">
+          <Field label="Timezone" hint="Shift lateness and dates are calculated in this zone.">
             <input
               name="timezone"
               defaultValue={cart?.timezone ?? "Asia/Kolkata"}
               required
-              className="input"
+              className="input font-mono"
             />
           </Field>
         </div>
 
-        {/* The pin ---------------------------------------------------------- */}
-        <fieldset className="space-y-3 border-t border-border pt-4">
-          <legend className="sr-only">Location</legend>
+        {/* Location Pin */}
+        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+          <legend className="sr-only">Geofence Coordinates</legend>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-medium">Where the cart stands</p>
-            <button type="button" onClick={dropPin} disabled={locating} className="btn btn-ghost">
-              {locating ? "Locating…" : "Use my location"}
+            <div className="flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-accent" />
+              <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                GPS Pin &amp; Geofence Radius
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dropPin}
+              disabled={locating}
+              className="btn btn-ghost text-xs"
+            >
+              <Navigation className={`h-3.5 w-3.5 text-accent ${locating ? "animate-spin" : ""}`} />
+              <span>{locating ? "Acquiring GPS…" : "Use my location"}</span>
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3.5 sm:grid-cols-3">
             <Field label="Latitude">
               <input
                 ref={latitudeRef}
@@ -233,7 +264,7 @@ function CartForm({
                 className="input font-mono"
               />
             </Field>
-            <Field label="Radius (metres)" hint="150m suits a street cart.">
+            <Field label="Radius (metres)" hint="150m suits street food carts.">
               <input
                 name="radiusM"
                 type="number"
@@ -241,35 +272,38 @@ function CartForm({
                 max={5000}
                 defaultValue={cart?.radiusM ?? 150}
                 required
-                className="input"
+                className="input font-mono"
               />
             </Field>
           </div>
 
-          {geoError && <p className="text-xs text-danger text-pretty">{geoError}</p>}
+          {geoError && (
+            <div className="flex items-center gap-2 text-xs text-danger">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span>{geoError}</span>
+            </div>
+          )}
 
           {coarse && (
             <p className="text-xs text-warning text-pretty">
-              That fix is only accurate to ±{Math.round(fix!.accuracyM)}m, which is
-              coarser than a punch is allowed to be. Drop the pin from a phone,
-              outdoors, or type the coordinates in.
+              ⚠️ GPS fix is accurate to ±{Math.round(fix!.accuracyM)}m (too coarse for strict geofence).
+              Confirm coordinates outdoors.
             </p>
           )}
 
           <p className="text-xs text-muted text-pretty">
-            Stand at the cart and press “use my location”, or type the coordinates.
-            Everyone assigned to this cart has to be inside this circle to punch.
-            {cart && ` Pin last moved ${new Date(cart.pinUpdatedAt).toLocaleDateString()}.`}
+            Staff assigned to this cart must stand within this radius to punch.
+            {cart && ` Pin last updated: ${new Date(cart.pinUpdatedAt).toLocaleDateString()}.`}
           </p>
         </fieldset>
 
-        <Field label="Uniform" hint="What the check compares this cart's selfies against.">
+        <Field label="Uniform Profile" hint="Vision AI compares selfies against this uniform definition.">
           <select
             name="uniformProfileId"
             defaultValue={cart?.uniformProfileId ?? ""}
             className="input"
           >
-            <option value="">— default (cap, apron, shirt) —</option>
+            <option value="">— Standard default (cap, apron, shirt) —</option>
             {uniforms.map((uniform) => (
               <option key={uniform.id} value={uniform.id}>
                 {uniform.name}
@@ -278,20 +312,20 @@ function CartForm({
           </select>
         </Field>
 
-        <label className="flex items-center gap-2.5 text-sm">
+        <label className="flex items-center gap-2.5 text-xs sm:text-sm font-medium cursor-pointer">
           <input
             type="checkbox"
             name="active"
             defaultChecked={cart?.active ?? true}
-            className="h-4 w-4 accent-[var(--accent)]"
+            className="h-4 w-4 accent-accent rounded"
           />
-          Active
+          <span>Active cart — inactive carts reject attendance check-ins.</span>
         </label>
 
         <FormFeedback state={state} />
 
-        <div className="flex flex-wrap gap-2.5">
-          <SubmitButton>{cart ? "Save changes" : "Add cart"}</SubmitButton>
+        <div className="flex flex-wrap gap-2.5 pt-2">
+          <SubmitButton>{cart ? "Save Changes" : "Create Cart"}</SubmitButton>
           <button type="button" onClick={onDone} className="btn btn-ghost">
             Cancel
           </button>

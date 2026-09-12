@@ -103,6 +103,19 @@ export async function listStaff(viewer: Viewer): Promise<StaffRecord[]> {
   return (data ?? []).map(toRecord);
 }
 
+/**
+ * The subset of the roster that attendance and payroll actually track.
+ *
+ * An owner is not a shift worker in this system -- see the `WORKER` /
+ * `RUN_A_CART` split in `src/lib/auth/rbac.ts` -- so without this filter they
+ * would show up on every day sheet marked absent, and on every payroll run
+ * with no salary set, purely for having a row in the same table as everyone
+ * else. A manager remains included: they work a shift as well as running one.
+ */
+export function trackableStaff(staff: StaffRecord[]): StaffRecord[] {
+  return staff.filter((member) => member.active && member.role !== "admin");
+}
+
 /** One person, if the viewer may see them. */
 export async function findStaffRecord(
   viewer: Viewer,

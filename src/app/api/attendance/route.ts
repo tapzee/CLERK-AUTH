@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 
 import { getViewerState } from "@/lib/auth/viewer";
 import { can } from "@/lib/auth/rbac";
-import { parseLocation } from "@/lib/geo";
+import { parseCaptureMethod, parseLocation } from "@/lib/geo";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { StorageError } from "@/lib/storage";
 import {
@@ -115,6 +115,7 @@ export async function POST(request: Request) {
         : null,
       width: numberOrNull(form.get("width")),
       height: numberOrNull(form.get("height")),
+      captureMethod: parseCaptureMethod(form),
     });
 
     /*

@@ -7,31 +7,28 @@ import { getViewerState } from "@/lib/auth/viewer";
 /**
  * The header links, chosen by role.
  *
- * A server component, so it reads the session directly rather than shipping the
- * permission table to the browser and deciding there. It shares the same
- * request-scoped `getViewerState` as the page beneath it, so this costs no
- * extra database read.
+ * A server component, so it reads the session directly.
  */
 export async function AppNav() {
   const state = await getViewerState();
 
   if (state.status === "signed-out") {
     return (
-      <div className="flex items-center gap-1.5 text-sm">
+      <div className="flex items-center gap-2 text-sm">
         <SignInButton mode="modal">
-          <button className="rounded-full px-4 py-1.5 text-muted transition hover:bg-surface-muted hover:text-foreground">
+          <button className="rounded-full px-4 py-1.5 font-medium text-muted transition hover:bg-surface-muted hover:text-foreground">
             Sign in
           </button>
         </SignInButton>
         <SignUpButton mode="modal">
-          <button className="btn btn-primary">Sign up</button>
+          <button className="btn btn-primary py-1.5 text-xs shadow-sm sm:text-sm">
+            Sign up
+          </button>
         </SignUpButton>
       </div>
     );
   }
 
-  // Enrolled or not, a signed-in person gets the punch screen: when they are
-  // not enrolled it is the page that tells them what to do about it.
   const links = [{ href: "/punch", label: "Punch" }];
 
   if (state.status === "enrolled") {
@@ -42,19 +39,21 @@ export async function AppNav() {
   }
 
   return (
-    <div className="flex items-center gap-1 text-sm">
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className="rounded-full px-3.5 py-1.5 text-muted transition hover:bg-surface-muted hover:text-foreground"
-        >
-          {link.label}
-        </Link>
-      ))}
-      <span className="ml-1.5 flex items-center">
+    <div className="flex items-center gap-1.5 text-sm">
+      <div className="flex items-center gap-1 rounded-full border border-border/60 bg-surface/60 p-1 backdrop-blur-md">
+        {links.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="rounded-full px-3.5 py-1 text-xs font-medium text-muted transition-all duration-150 hover:bg-surface-muted hover:text-foreground sm:text-sm"
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
+      <div className="ml-1 flex items-center">
         <UserButton />
-      </span>
+      </div>
     </div>
   );
 }

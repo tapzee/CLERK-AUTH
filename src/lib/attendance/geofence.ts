@@ -39,7 +39,25 @@ export function distanceMetres(a: Point, b: Point): number {
  * GPS return single-digit accuracy outdoors, which is what a cart punch should
  * be, so this rejects the guess rather than trusting it.
  */
-export const MAX_ACCURACY_M = 100;
+/**
+ * Overridable so the app can be tested on a laptop.
+ *
+ * A desktop has no GPS radio: the browser falls back to Wi-Fi and IP lookup and
+ * reports a few hundred metres, which can never clear the production ceiling.
+ * Raising this in `.env.local` is how you try the punch flow at a desk; leave it
+ * alone in production, where every real punch comes off a phone.
+ *
+ * `NEXT_PUBLIC_` because `checkGeofence` runs in both places -- the browser for
+ * live feedback, the server for the verdict that actually counts -- and both
+ * halves must agree on the limit. It is not a secret: the server re-checks
+ * every punch, and the coordinates were always self-reported anyway.
+ */
+export const MAX_ACCURACY_M = readAccuracyCeiling();
+
+function readAccuracyCeiling(): number {
+  const parsed = Number(process.env.NEXT_PUBLIC_GEOFENCE_MAX_ACCURACY_M);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+}
 
 export type GeofenceVerdict = {
   ok: boolean;

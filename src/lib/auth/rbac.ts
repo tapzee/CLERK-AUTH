@@ -49,23 +49,28 @@ export const PERMISSIONS = [
 
 export type Permission = (typeof PERMISSIONS)[number];
 
-/** What a worker can do: punch, and look at their own record. */
-const STAFF: readonly Permission[] = [
+/**
+ * Punching in, and looking at one's own record.
+ *
+ * Kept apart from the console permissions below because it describes being a
+ * *worker* rather than running the business — a manager is both, but an owner
+ * is only ever the second. Without this split, "the owner can do everything a
+ * manager can" would also silently mean "the owner clocks in and draws a
+ * salary like a shift worker", which is never true here.
+ */
+const WORKER: readonly Permission[] = [
   "attendance:punch",
   "attendance:read:own",
   "salary:read:own",
 ];
 
 /**
- * A manager runs the day at their own cart.
- *
- * They set shift times, salaries and the cart's geofence, review uniform
- * verdicts the model could not settle, and prepare payroll — but they cannot
- * approve it, and cannot hand out roles. Those two are what keeps a manager
- * from quietly granting themselves a raise and signing it off.
+ * Running one cart day to day: shift times, salaries, the geofence, uniform
+ * review, and preparing payroll -- but not approving it, and not handing out
+ * roles. Those two are what keep a manager from quietly granting themselves a
+ * raise and signing it off.
  */
-const MANAGER: readonly Permission[] = [
-  ...STAFF,
+const RUN_A_CART: readonly Permission[] = [
   "console:read",
   "attendance:read:team",
   "attendance:review",
@@ -80,15 +85,29 @@ const MANAGER: readonly Permission[] = [
 ];
 
 /**
- * The owner. Everything, across every cart, plus the two powers withheld from
- * a manager: granting roles, and approving what payroll actually pays out.
+ * A manager runs a cart, and also works it: both `RUN_A_CART` and `WORKER`.
+ */
+const MANAGER: readonly Permission[] = [...WORKER, ...RUN_A_CART];
+
+/**
+ * The owner. Everything a manager can do to run the business, across every
+ * cart, plus the two powers withheld from a manager: granting roles, and
+ * approving what payroll actually pays out.
+ *
+ * Deliberately does *not* include `WORKER`: an owner is not tracked as a shift
+ * worker by this system, so they never show up marked absent on a day sheet or
+ * with a phantom salary line on payroll -- see the `role !== "admin"` filters
+ * in `src/lib/manage/attendance.ts` and `src/lib/manage/payroll.ts`, which this
+ * permission split exists to justify.
  */
 const ADMIN: readonly Permission[] = [
-  ...MANAGER,
+  ...RUN_A_CART,
   "staff:role:write",
   "uniform:write",
   "payroll:approve",
 ];
+
+const STAFF: readonly Permission[] = WORKER;
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   staff: STAFF,

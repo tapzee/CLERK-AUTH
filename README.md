@@ -337,8 +337,8 @@ automatically, so nothing needs overriding.
 | `CLERK_SECRET_KEY` | Server only. `sk_live_…` for Production. |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | `/sign-in` |
 | `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | `/sign-up` |
-| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/punch` |
-| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/punch` |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/` — the landing page routes by role |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/` |
 | `NEXT_PUBLIC_SUPABASE_URL` | |
 | `SUPABASE_SECRET_KEY` | Server only. `sb_secret_…`, never the publishable key. |
 | `SUPABASE_PHOTOS_BUCKET` | `photos` |
@@ -350,6 +350,7 @@ automatically, so nothing needs overriding.
 | `GEMINI_MEDIA_RESOLUTION` | `MEDIA_RESOLUTION_HIGH` |
 | `GEMINI_DAILY_CALL_CAP` | Ceiling on model calls per day |
 | `UNIFORM_CHECK_TIMEOUT_MS` | How long a check-in waits for a verdict. Default 9000. |
+| `NEXT_PUBLIC_GEOFENCE_MAX_ACCURACY_M` | Coarsest location fix accepted. Default 100 — **leave it at the default in production.** |
 | `CRON_SECRET` | Vercel presents this to the cron route as a bearer token |
 
 `SUPABASE_ACCESS_TOKEN` is **not** in this list on purpose: it is a local

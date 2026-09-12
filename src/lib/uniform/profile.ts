@@ -2,13 +2,8 @@ import "server-only";
 
 import { readObjectBytes } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { ReferenceImage, UniformSpec } from "@/lib/gemini/dresscode";
-import {
-  DEFAULT_PASS_SCORE,
-  DEFAULT_WEIGHTS,
-  normaliseWeights,
-  type ItemKey,
-} from "./items";
+import type { ReferenceDescription, ReferenceImage, UniformSpec } from "@/lib/gemini/dresscode";
+import { DEFAULT_PASS_SCORE, weightsFromReferences, type ItemKey } from "./items";
 
 /**
  * Loading the uniform a photo will be judged against.
@@ -22,15 +17,15 @@ import {
 /** Used when a cart has no uniform attached, so a check still means something. */
 export const DEFAULT_UNIFORM: UniformSpec = {
   promptNotes: null,
-  weights: DEFAULT_WEIGHTS,
+  weights: weightsFromReferences([]),
   passScore: DEFAULT_PASS_SCORE,
-  references: [],
+  referenceImages: [],
+  referenceDescriptions: [],
 };
 
 type ProfileRow = {
   id: string;
   prompt_notes: string | null;
-  score_weights: unknown;
   pass_score: number | null;
 };
 
@@ -40,10 +35,11 @@ type ReferenceRow = {
   provider: string;
   storage_path: string;
   content_type: string;
+  description: string | null;
 };
 
 /**
- * Loads several uniforms at once, each with its reference photos.
+ * Loads several uniforms at once, each with its reference photos or descriptions.
  *
  * Two queries and one parallel fetch regardless of how many profiles are asked
  * for, because a batch can span carts that use different uniforms and doing
@@ -59,37 +55,54 @@ export async function loadUniforms(
 
   const supabase = supabaseAdmin();
   const [profiles, references] = await Promise.all([
-    supabase
-      .from("uniform_profiles")
-      .select("id, prompt_notes, score_weights, pass_score")
-      .in("id", ids),
+    supabase.from("uniform_profiles").select("id, prompt_notes, pass_score").in("id", ids),
     supabase
       .from("uniform_reference_images")
-      .select("uniform_profile_id, kind, provider, storage_path, content_type")
+      .select("uniform_profile_id, kind, provider, storage_path, content_type, description")
       .in("uniform_profile_id", ids),
   ]);
+
+  const referenceRows = (references.data ?? []) as ReferenceRow[];
+
+  // Which items an owner has actually given a photo for -- this is the whole
+  // configuration a score needs, so it decides the weights directly rather
+  // than through a number the owner would otherwise have to set by hand.
+  const presentKindsByProfile = new Map<string, ItemKey[]>();
+  for (const row of referenceRows) {
+    presentKindsByProfile.set(row.uniform_profile_id, [
+      ...(presentKindsByProfile.get(row.uniform_profile_id) ?? []),
+      row.kind,
+    ]);
+  }
 
   for (const row of (profiles.data ?? []) as ProfileRow[]) {
     byId.set(row.id, {
       promptNotes: row.prompt_notes,
-      weights: normaliseWeights(row.score_weights),
+      weights: weightsFromReferences(presentKindsByProfile.get(row.id) ?? []),
       passScore: row.pass_score ?? DEFAULT_PASS_SCORE,
-      references: [],
+      referenceImages: [],
+      referenceDescriptions: [],
     });
   }
 
-  // A uniform has at most four of these and they are shared by every worker in
-  // the batch, so fetching them in parallel costs one round trip in wall time.
+  // The logo is fetched as bytes; other garments use their written description
+  // when present to save input tokens, falling back to bytes when not yet described.
   await Promise.all(
-    ((references.data ?? []) as ReferenceRow[]).map(async (row) => {
+    referenceRows.map(async (row) => {
       const spec = byId.get(row.uniform_profile_id);
       if (!spec) return;
+
+      if (row.kind !== "logo" && row.description) {
+        const desc: ReferenceDescription = { kind: row.kind, text: row.description };
+        spec.referenceDescriptions.push(desc);
+        return;
+      }
 
       const bytes = await readObjectBytes(row.provider, row.storage_path);
       if (!bytes) return;
 
       const reference: ReferenceImage = { kind: row.kind, bytes, mimeType: row.content_type };
-      spec.references.push(reference);
+      spec.referenceImages.push(reference);
     }),
   );
 

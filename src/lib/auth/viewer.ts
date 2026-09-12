@@ -293,3 +293,28 @@ export async function requirePageAccess(permission: Permission): Promise<Viewer>
 
   return state.viewer;
 }
+
+/**
+ * Where a signed-in person belongs when they land on a public page.
+ *
+ * An owner or manager wants the console; everybody else wants the camera.
+ */
+export function homePathFor(viewer: Viewer): string {
+  return can(viewer.role, "console:read") ? "/manage" : "/punch";
+}
+
+/**
+ * Sends an already-signed-in visitor off a signed-out page.
+ *
+ * Clerk refuses to render `<SignIn/>` to somebody who is already signed in --
+ * single-session mode -- and shows a developer notice instead of a screen. This
+ * is what keeps the landing page, /sign-in and /sign-up from ever reaching that
+ * state, and it puts the rule in one place rather than three.
+ */
+export async function redirectIfSignedIn(): Promise<void> {
+  const state = await getViewerState();
+
+  if (state.status === "enrolled") redirect(homePathFor(state.viewer));
+  // Signed in but nobody has enrolled them: /punch explains what to do.
+  if (state.status === "not-enrolled") redirect("/punch");
+}

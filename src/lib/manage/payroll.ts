@@ -7,7 +7,7 @@ import { StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 import { getMonthlyAttendance } from "./attendance";
-import { listStaff, type StaffRecord } from "./staff";
+import { listStaff, trackableStaff, type StaffRecord } from "./staff";
 
 /**
  * Payroll: what attendance says somebody is owed, and who signs it off.
@@ -109,7 +109,7 @@ export async function getPayrollLines(
   viewer: Viewer,
   periodMonth: string,
 ): Promise<PayrollLine[]> {
-  const staff = (await listStaff(viewer)).filter((member) => member.active);
+  const staff = trackableStaff(await listStaff(viewer));
   if (staff.length === 0) return [];
 
   const staffIds = staff.map((member) => member.id);

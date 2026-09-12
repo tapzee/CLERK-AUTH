@@ -1,14 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-/**
- * Moves the day sheet between dates.
- *
- * The date lives in the query string rather than in component state so a
- * manager can bookmark or share "the 3rd", and so the page stays a server
- * component that fetches exactly the day it renders.
- */
 export function DayPicker({ date }: { date: string }) {
   const router = useRouter();
 
@@ -16,7 +10,6 @@ export function DayPicker({ date }: { date: string }) {
     router.push(`/manage/attendance?date=${to}`);
   }
 
-  /** `offset` in days, applied in UTC so it cannot skip one at a DST edge. */
   function shift(offset: number) {
     const [year, month, day] = date.split("-").map(Number);
     const moved = new Date(Date.UTC(year, month - 1, day + offset));
@@ -24,31 +17,33 @@ export function DayPicker({ date }: { date: string }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 rounded-2xl border border-border/80 bg-surface/70 p-1 backdrop-blur-md shadow-sm">
       <button
         type="button"
         onClick={() => shift(-1)}
         aria-label="Previous day"
-        className="btn btn-ghost px-3"
+        className="grid h-8 w-8 place-items-center rounded-xl text-muted transition hover:bg-surface-muted hover:text-foreground"
       >
-        ‹
+        <ChevronLeft className="h-4 w-4" />
       </button>
 
-      <input
-        type="date"
-        value={date}
-        onChange={(event) => event.target.value && go(event.target.value)}
-        aria-label="Show this date"
-        className="input w-auto"
-      />
+      <div className="relative flex items-center">
+        <input
+          type="date"
+          value={date}
+          onChange={(event) => event.target.value && go(event.target.value)}
+          aria-label="Show this date"
+          className="bg-transparent px-2.5 py-1 font-mono text-xs font-semibold text-foreground outline-none cursor-pointer"
+        />
+      </div>
 
       <button
         type="button"
         onClick={() => shift(1)}
         aria-label="Next day"
-        className="btn btn-ghost px-3"
+        className="grid h-8 w-8 place-items-center rounded-xl text-muted transition hover:bg-surface-muted hover:text-foreground"
       >
-        ›
+        <ChevronRight className="h-4 w-4" />
       </button>
     </div>
   );
