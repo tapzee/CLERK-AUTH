@@ -210,6 +210,18 @@ body {
     border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   }
 
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-muted) 0%,
+      color-mix(in srgb, var(--surface) 60%, var(--surface-muted)) 50%,
+      var(--surface-muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 0.75rem;
+  }
+
   .input {
     width: 100%;
     border: 1px solid var(--border);

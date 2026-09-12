@@ -57,6 +57,7 @@ export async function AppNav() {
           <Link
             key={link.href}
             href={link.href}
+            prefetch={true}
             className="rounded-full px-3.5 py-1 text-xs font-medium text-muted transition-all duration-150 hover:bg-surface-muted hover:text-foreground sm:text-sm"
           >
             {link.label}

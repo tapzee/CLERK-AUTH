@@ -44,6 +44,7 @@ export function ConsoleNav({ items }: { items: NavItem[] }) {
             <li key={item.href} className="shrink-0 md:shrink">
               <Link
                 href={item.href}
+                prefetch={true}
                 aria-current={current ? "page" : undefined}
                 className={`
                   group flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold tracking-tight transition-all duration-150 sm:text-sm
