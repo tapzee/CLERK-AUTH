@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
 import { AttendancePunch } from "@/components/AttendancePunch";
+import { kickWorkerIfPending } from "@/lib/attendance/dress-checks";
 import { findStaff, getAttendanceStatus } from "@/lib/attendance/service";
 import { StorageError } from "@/lib/storage";
 
@@ -55,6 +56,11 @@ export default async function AttendancePage() {
   }
 
   const status = await getAttendanceStatus(staff);
+
+  // This page is what the punch screen re-renders while it waits for a verdict,
+  // so the retry hangs off here rather than off the API route.
+  kickWorkerIfPending(userId, status.events);
+
   const privileged = staff.role === "admin" || staff.role === "manager";
 
   return (
