@@ -14,6 +14,7 @@ import {
   listUniforms,
   staffTableIsEmpty,
 } from "@/lib/attendance/admin";
+import { StorageError } from "@/lib/storage";
 
 export const metadata = { title: "Admin · Live Photos" };
 
@@ -23,6 +24,29 @@ export default async function AdminPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
+  try {
+    return await renderAdmin(userId);
+  } catch (error) {
+    // Without this the page is a bare "a server error occurred", which says
+    // nothing about a missing table or an unreachable database — and this is
+    // the one screen where whoever is looking can actually act on that.
+    console.error("[admin]", error);
+    return (
+      <Shell>
+        <div className="rounded-2xl border border-dashed border-[color:var(--danger)]/40 px-6 py-10 text-center">
+          <p className="text-sm font-medium">The admin panel could not load</p>
+          <p className="mx-auto mt-1.5 max-w-md text-sm text-muted text-pretty">
+            {error instanceof StorageError
+              ? error.message
+              : "Something went wrong reading the database. Check that the migrations in supabase/ have been run against the project this deployment points at."}
+          </p>
+        </div>
+      </Shell>
+    );
+  }
+}
+
+async function renderAdmin(userId: string) {
   // Before anyone is enrolled there is no role to check against, so the
   // bootstrap path is offered instead of a permission error.
   if (await staffTableIsEmpty()) {
