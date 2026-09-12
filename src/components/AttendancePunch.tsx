@@ -54,10 +54,11 @@ export function AttendancePunch({ status }: { status: AttendanceStatus }) {
 
   // A verdict lands a second or two after the punch, on a background worker.
   // Rather than hold the request open for it, the page asks again until it
-  // settles, then stops.
-  const awaitingVerdict = events.some(
-    (event) =>
-      event.dressCheck?.status === "queued" || event.dressCheck?.status === "running",
+  // settles, then stops. "failed" is included because the worker retries those
+  // until they run out of attempts, and each re-render nudges it; the poll
+  // limit below is what stops this from running forever.
+  const awaitingVerdict = events.some((event) =>
+    ["queued", "running", "failed"].includes(event.dressCheck?.status ?? ""),
   );
 
   useEffect(() => {
