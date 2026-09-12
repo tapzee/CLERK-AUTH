@@ -10,7 +10,10 @@ import {
   recordPunch,
 } from "@/lib/attendance/service";
 import { parsePunchKind } from "@/lib/attendance/types";
-import { runDressCheckBatch } from "@/lib/attendance/dress-checks";
+import {
+  kickWorkerIfPending,
+  runDressCheckBatch,
+} from "@/lib/attendance/dress-checks";
 
 export const runtime = "nodejs";
 // Same reasoning as the photos route: the evidence upload plus the storage
@@ -31,10 +34,11 @@ export async function GET() {
       // echoed back so it can be pasted straight into the staff table.
       return NextResponse.json({ enrolled: false, clerkUserId: userId });
     }
-    return NextResponse.json({
-      enrolled: true,
-      status: await getAttendanceStatus(staff),
-    });
+
+    const status = await getAttendanceStatus(staff);
+    kickWorkerIfPending(userId, status.events);
+
+    return NextResponse.json({ enrolled: true, status });
   } catch (error) {
     return errorResponse(error);
   }
@@ -96,9 +100,10 @@ export async function POST(request: Request) {
     });
 
     // Fast path for the verdict: runs once this response is on its way, so the
-    // staff member is never waiting on a model call. The cron schedule is the
-    // durable path — `after` is bounded by maxDuration and is not retried, so
-    // anything it drops is picked up within the minute.
+    // staff member is never waiting on a model call. `after` is bounded by
+    // maxDuration and is not retried, so two things back it up — the punch
+    // screen's poll, which kicks the worker again while a verdict is still
+    // outstanding, and the nightly cron for anything left after that.
     if (event.kind === "in") {
       after(async () => {
         try {
