@@ -378,12 +378,19 @@ const ITEM_LABELS: Array<[string, string]> = [
   ["apron", "apron"],
   ["shirt", "shirt"],
   ["logo", "logo"],
+  ["neat", "turnout"],
 ];
 
-function itemsIn(check: DressCheck, state: string): string[] {
-  return ITEM_LABELS.filter(([key]) => check.items?.[key] === state).map(
+/** Grades are "g" worn properly, "p" worn badly, "n" not worn, "?" unsure. */
+function itemsIn(check: DressCheck, grade: string): string[] {
+  return ITEM_LABELS.filter(([key]) => check.items?.[key] === grade).map(
     ([, label]) => label,
   );
+}
+
+function joinList(parts: string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 }
 
 function DressCheckLine({ check }: { check: DressCheck }) {
@@ -402,6 +409,7 @@ function DressCheckLine({ check }: { check: DressCheck }) {
   }
 
   const missing = itemsIn(check, "n");
+  const sloppy = itemsIn(check, "p");
   const unclear = itemsIn(check, "?");
 
   const tone =
@@ -411,14 +419,21 @@ function DressCheckLine({ check }: { check: DressCheck }) {
         ? "text-[color:var(--danger)]"
         : "text-muted";
 
+  // Faults are listed even on a pass: scoring 82 because the apron was untied
+  // is worth telling someone, and it is the only way they know what to fix.
+  const faults = [
+    missing.length > 0 ? `no ${joinList(missing)}` : "",
+    sloppy.length > 0 ? `${joinList(sloppy)} worn badly` : "",
+  ].filter(Boolean);
+
   const detail =
-    check.verdict === "pass"
-      ? "Uniform OK"
-      : check.verdict === "fail"
-        ? missing.length > 0
-          ? `No ${missing.join(", no ")}`
-          : "Below the pass mark"
-        : `Could not tell${unclear.length > 0 ? ` — ${unclear.join(", ")} unclear` : ""}`;
+    check.verdict === "unclear"
+      ? `Could not tell${unclear.length > 0 ? ` — ${joinList(unclear)} unclear` : ""}`
+      : faults.length > 0
+        ? faults.join(", ")
+        : check.verdict === "pass"
+          ? "Uniform OK"
+          : "Below the pass mark";
 
   return (
     <p className={`flex flex-wrap items-baseline gap-x-2 text-xs ${tone}`}>
