@@ -100,7 +100,7 @@ function termsFor(member: StaffRecord) {
   return {
     monthlySalary: member.monthlySalary,
     workingDays: member.workingDaysPerMonth,
-    lateDeduction: member.lateDeduction,
+    lateDeduction: member.role === "manager" ? 0 : member.lateDeduction,
   };
 }
 
@@ -131,7 +131,10 @@ export async function getPayrollLines(
   const runByStaff = new Map((runs.data ?? []).map((row) => [row.staff_id, toRun(row)]));
 
   return staff.map((member) => {
-    const summary = attendance.get(member.id) ?? { daysPresent: 0, daysLate: 0 };
+    const rawSummary = attendance.get(member.id) ?? { daysPresent: 0, daysLate: 0 };
+    // Managers have flexible working hours: lateness is not tracked or deducted.
+    const summary = member.role === "manager" ? { ...rawSummary, daysLate: 0 } : rawSummary;
+
     return {
       staff: member,
       daysPresent: summary.daysPresent,

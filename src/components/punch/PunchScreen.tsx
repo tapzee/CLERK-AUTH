@@ -43,6 +43,7 @@ type Shot = {
   height: number;
   method: CaptureMethod;
   source?: "camera" | "upload";
+  capturedAt?: string;
 };
 
 const LABEL: Record<PunchKind, string> = { in: "Check in", out: "Check out" };
@@ -160,6 +161,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
         height: frame.height,
         method,
         source: "camera",
+        capturedAt: new Date().toISOString(),
       });
       setPhase({ kind: "review" });
     },
@@ -229,6 +231,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
           height,
           method: "manual",
           source: "upload",
+          capturedAt: new Date().toISOString(),
         });
         setPhase({ kind: "review" });
       } catch {
@@ -282,7 +285,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     form.append("kind", nextKind);
     form.append("width", String(shot.width));
     form.append("height", String(shot.height));
-    form.append("capturedAt", new Date().toISOString());
+    form.append("capturedAt", shot.capturedAt ?? new Date().toISOString());
     form.append("captureMethod", shot.method);
 
     if (fresh) {

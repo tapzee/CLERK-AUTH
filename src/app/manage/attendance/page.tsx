@@ -156,6 +156,7 @@ export default async function AttendancePage({
 }
 
 function shiftText(row: DayRow): string {
+  if (row.staff.role === "manager") return "Flexible (Manager)";
   if (!row.staff.shiftStart) return "No shift";
   const end = row.staff.shiftEnd ? `–${row.staff.shiftEnd.slice(0, 5)}` : "";
   return `${row.staff.shiftStart.slice(0, 5)}${end} (+${row.staff.graceMinutes}m)`;
@@ -166,10 +167,14 @@ function CheckInCell({ row }: { row: DayRow }) {
     return <Pill tone="danger">Absent</Pill>;
   }
 
+  const isManager = row.staff.role === "manager";
+
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       <LocalTime at={row.checkIn.at} />
-      {row.checkIn.isLate ? (
+      {isManager ? (
+        <Pill tone="success">Present</Pill>
+      ) : row.checkIn.isLate ? (
         <Pill tone="danger">{row.checkIn.lateByMinutes}m late</Pill>
       ) : row.checkIn.lateByMinutes ? (
         <Pill tone="neutral">+{row.checkIn.lateByMinutes}m</Pill>

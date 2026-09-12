@@ -24,6 +24,7 @@ export default async function StaffPage() {
         // The form disables the role field without this; the action refuses it
         // regardless, so this is presentation rather than protection.
         canSetRoles={can(viewer.role, "staff:role:write")}
+        currentStaffId={viewer.staffId}
       />
     </section>
   );

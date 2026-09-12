@@ -20,7 +20,7 @@ export default async function OverviewPage() {
   ]);
 
   const present = sheet.filter((row) => row.checkIn).length;
-  const late = sheet.filter((row) => row.checkIn?.isLate).length;
+  const late = sheet.filter((row) => row.staff.role !== "manager" && row.checkIn?.isLate).length;
   const absent = sheet.length - present;
   const refused = sheet.reduce((total, row) => total + row.rejectedAttempts, 0);
 
@@ -136,7 +136,9 @@ async function PayrollWaiting({ viewer }: { viewer: Viewer }) {
 }
 
 function LateList({ sheet }: { sheet: Awaited<ReturnType<typeof getDaySheet>> }) {
-  const problems = sheet.filter((row) => !row.checkIn || row.checkIn.isLate);
+  const problems = sheet.filter(
+    (row) => !row.checkIn || (row.staff.role !== "manager" && row.checkIn.isLate),
+  );
 
   if (sheet.length === 0) {
     return (
@@ -189,7 +191,9 @@ function LateList({ sheet }: { sheet: Awaited<ReturnType<typeof getDaySheet>> })
                   {row.staff.fullName}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  {row.staff.shiftStart
+                  {row.staff.role === "manager"
+                    ? "Manager · Flexible hours"
+                    : row.staff.shiftStart
                     ? `Shift: ${row.staff.shiftStart.slice(0, 5)} · ${row.staff.graceMinutes}m grace`
                     : "No shift assigned"}
                 </p>

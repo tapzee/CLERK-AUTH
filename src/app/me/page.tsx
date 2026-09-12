@@ -67,12 +67,13 @@ export default async function MyRecordPage({
 
   if (!record) redirect("/punch");
 
-  const summary = attendance.get(viewer.staffId) ?? { daysPresent: 0, daysLate: 0 };
+  const rawSummary = attendance.get(viewer.staffId) ?? { daysPresent: 0, daysLate: 0 };
+  const summary = viewer.role === "manager" ? { ...rawSummary, daysLate: 0 } : rawSummary;
   const pay = calculatePay(
     {
       monthlySalary: record.monthlySalary,
       workingDays: record.workingDaysPerMonth,
-      lateDeduction: record.lateDeduction,
+      lateDeduction: viewer.role === "manager" ? 0 : record.lateDeduction,
     },
     summary,
   );
@@ -104,9 +105,9 @@ export default async function MyRecordPage({
         />
         <Stat
           label="Days late"
-          value={summary.daysLate}
-          detail={`past your ${record.graceMinutes}m grace`}
-          tone={summary.daysLate > 0 ? "warning" : "success"}
+          value={viewer.role === "manager" ? 0 : summary.daysLate}
+          detail={viewer.role === "manager" ? "Flexible hours (exempt)" : `past your ${record.graceMinutes}m grace`}
+          tone={viewer.role !== "manager" && summary.daysLate > 0 ? "warning" : "success"}
           icon={<Clock className="h-4 w-4 text-accent" />}
         />
         <Stat
@@ -190,7 +191,9 @@ export default async function MyRecordPage({
 
                   <div className="flex flex-wrap items-center gap-2">
                     {faults && <span className="text-xs text-muted">{faults}</span>}
-                    {punch.isLate && <Pill tone="danger">{punch.lateByMinutes}m late</Pill>}
+                    {viewer.role !== "manager" && punch.isLate && (
+                      <Pill tone="danger">{punch.lateByMinutes}m late</Pill>
+                    )}
                     {punch.dressCheck?.score !== null &&
                       punch.dressCheck?.score !== undefined && (
                         <Pill tone={punch.dressCheck.verdict === "pass" ? "success" : "warning"}>

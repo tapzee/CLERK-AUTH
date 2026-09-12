@@ -220,12 +220,49 @@ export function Stat({
 }
 
 /**
- * A time rendered in the viewer's local timezone.
+ * Formats an ISO date/time string into a human-readable local time (e.g. "9:30 AM").
+ * Defaults to "Asia/Kolkata" to prevent server-side UTC rendering discrepancies.
  */
-export function LocalTime({ at }: { at: string }) {
+export function formatLocalTime(
+  at: string | Date,
+  options?: { timeZone?: string; hour12?: boolean },
+): string {
+  const date = typeof at === "string" ? new Date(at) : at;
+  if (!date || isNaN(date.getTime())) return "—";
+
+  const timeZone = options?.timeZone || "Asia/Kolkata";
+  const hour12 = options?.hour12 ?? true;
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12,
+      timeZone,
+    }).format(date);
+  } catch {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+}
+
+/**
+ * A time rendered in the cart's or Indian local timezone with 12-hour format.
+ */
+export function LocalTime({
+  at,
+  timeZone = "Asia/Kolkata",
+}: {
+  at: string;
+  timeZone?: string;
+}) {
   return (
-    <time dateTime={at} suppressHydrationWarning className="font-mono text-xs tabular-nums">
-      {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    <time
+      dateTime={at}
+      suppressHydrationWarning
+      title={at}
+      className="font-mono text-xs tabular-nums"
+    >
+      {formatLocalTime(at, { timeZone })}
     </time>
   );
 }

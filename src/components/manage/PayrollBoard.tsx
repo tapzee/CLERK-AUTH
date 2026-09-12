@@ -178,7 +178,14 @@ function PayrollRow({
             {staff.fullName.charAt(0)}
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-foreground text-sm sm:text-base">{staff.fullName}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-foreground text-sm sm:text-base">{staff.fullName}</p>
+              {staff.role === "manager" && (
+                <Pill tone="accent" className="text-[10px]">
+                  Manager
+                </Pill>
+              )}
+            </div>
             <p className="mt-0.5 text-xs text-muted font-mono">
               {staff.monthlySalary === null
                 ? "No salary configured"
@@ -201,8 +208,8 @@ function PayrollRow({
         <Figure label="Days Present" value={String(shown.daysPresent)} />
         <Figure
           label="Days Late"
-          value={String(shown.daysLate)}
-          tone={shown.daysLate > 0 ? "warning" : "neutral"}
+          value={staff.role === "manager" ? "— (Flexible)" : String(shown.daysLate)}
+          tone={staff.role !== "manager" && shown.daysLate > 0 ? "warning" : "neutral"}
         />
         <Figure label="Gross" value={formatMoney(shown.gross)} />
         <Figure

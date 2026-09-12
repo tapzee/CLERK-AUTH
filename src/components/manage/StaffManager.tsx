@@ -26,10 +26,12 @@ export function StaffManager({
   staff,
   carts,
   canSetRoles,
+  currentStaffId,
 }: {
   staff: StaffRecord[];
   carts: CartRecord[];
   canSetRoles: boolean;
+  currentStaffId?: string;
 }) {
   const [editing, setEditing] = useState<Editing>(null);
   const cartName = new Map(carts.map((cart) => [cart.id, cart.name]));
@@ -58,6 +60,7 @@ export function StaffManager({
           member={editing.member}
           carts={carts}
           canSetRoles={canSetRoles}
+          currentStaffId={currentStaffId}
           onDone={() => setEditing(null)}
         />
       )}
@@ -130,6 +133,7 @@ export function StaffManager({
 }
 
 function shiftLabel(member: StaffRecord): string {
+  if (member.role === "manager") return "Flexible hours";
   if (!member.shiftStart) return "No shift";
   const end = member.shiftEnd ? `–${member.shiftEnd.slice(0, 5)}` : "";
   return `${member.shiftStart.slice(0, 5)}${end} (${member.graceMinutes}m grace)`;
@@ -139,14 +143,19 @@ function StaffForm({
   member,
   carts,
   canSetRoles,
+  currentStaffId,
   onDone,
 }: {
   member: StaffRecord | null;
   carts: CartRecord[];
   canSetRoles: boolean;
+  currentStaffId?: string;
   onDone: () => void;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(saveStaffAction, IDLE);
+  const [selectedRole, setSelectedRole] = useState<Role>(member?.role ?? "staff");
+
+  const isSelf = Boolean(member && currentStaffId && member.id === currentStaffId);
 
   useEffect(() => {
     if (state.ok) onDone();
@@ -210,13 +219,20 @@ function StaffForm({
           </Field>
           <Field
             label="System Role"
-            hint={canSetRoles ? undefined : "Only an owner can change roles."}
+            hint={
+              isSelf
+                ? "You cannot change your own role (Protection against accidental lockout)."
+                : canSetRoles
+                ? undefined
+                : "Only an owner can change roles."
+            }
           >
             <select
               name="role"
-              defaultValue={member?.role ?? "staff"}
-              disabled={!canSetRoles}
-              className="input"
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value as Role)}
+              disabled={!canSetRoles || isSelf}
+              className="input disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {ROLES.map((role: Role) => (
                 <option key={role} value={role}>
@@ -224,7 +240,7 @@ function StaffForm({
                 </option>
               ))}
             </select>
-            {!canSetRoles && (
+            {(!canSetRoles || isSelf) && (
               <input type="hidden" name="role" value={member?.role ?? "staff"} />
             )}
           </Field>
@@ -242,45 +258,61 @@ function StaffForm({
         )}
 
         {/* Shift Section */}
-        <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
-          <legend className="sr-only">Shift Configuration</legend>
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-accent" />
-            <p className="font-bold text-xs uppercase tracking-wider text-foreground">
-              Shift &amp; Grace Settings
+        {selectedRole === "manager" ? (
+          <div className="rounded-xl border border-accent/20 bg-accent-soft/30 p-4">
+            <div className="flex items-center gap-2 text-accent">
+              <Clock className="h-4 w-4" />
+              <p className="font-bold text-xs uppercase tracking-wider">Flexible Working Hours</p>
+            </div>
+            <p className="mt-1.5 text-xs text-muted">
+              Managers have flexible working hours. Fixed shift times, grace window, and late deductions do not apply.
+              Daily attendance punch is still required to calculate monthly payable days.
             </p>
+            <input type="hidden" name="shiftStart" value="" />
+            <input type="hidden" name="shiftEnd" value="" />
+            <input type="hidden" name="graceMinutes" value="0" />
           </div>
+        ) : (
+          <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
+            <legend className="sr-only">Shift Configuration</legend>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-accent" />
+              <p className="font-bold text-xs uppercase tracking-wider text-foreground">
+                Shift &amp; Grace Settings
+              </p>
+            </div>
 
-          <div className="grid gap-3.5 sm:grid-cols-3">
-            <Field label="Shift Start (Check In)">
-              <input
-                name="shiftStart"
-                type="time"
-                defaultValue={member?.shiftStart?.slice(0, 5) ?? ""}
-                className="input font-mono"
-              />
-            </Field>
-            <Field label="Shift End (Check Out)">
-              <input
-                name="shiftEnd"
-                type="time"
-                defaultValue={member?.shiftEnd?.slice(0, 5) ?? ""}
-                className="input font-mono"
-              />
-            </Field>
-            <Field label="Grace Window (Minutes)" hint="Arrivals within grace count as on time.">
-              <input
-                name="graceMinutes"
-                type="number"
-                min={0}
-                max={240}
-                defaultValue={member?.graceMinutes ?? 30}
-                required
-                className="input font-mono"
-              />
-            </Field>
-          </div>
-        </fieldset>
+            <div className="grid gap-3.5 sm:grid-cols-3">
+              <Field label="Shift Start (Check In)">
+                <input
+                  name="shiftStart"
+                  type="time"
+                  defaultValue={member?.shiftStart?.slice(0, 5) ?? ""}
+                  className="input font-mono"
+                />
+              </Field>
+              <Field label="Shift End (Check Out)">
+                <input
+                  name="shiftEnd"
+                  type="time"
+                  defaultValue={member?.shiftEnd?.slice(0, 5) ?? ""}
+                  className="input font-mono"
+                />
+              </Field>
+              <Field label="Grace Window (Minutes)" hint="Arrivals within grace count as on time.">
+                <input
+                  name="graceMinutes"
+                  type="number"
+                  min={0}
+                  max={240}
+                  defaultValue={member?.graceMinutes ?? 30}
+                  required
+                  className="input font-mono"
+                />
+              </Field>
+            </div>
+          </fieldset>
+        )}
 
         {/* Pay Section */}
         <fieldset className="space-y-3.5 border-t border-border/70 pt-4">
@@ -292,7 +324,7 @@ function StaffForm({
             </p>
           </div>
 
-          <div className="grid gap-3.5 sm:grid-cols-3">
+          <div className={`grid gap-3.5 ${selectedRole === "manager" ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
             <Field label="Monthly Base Salary">
               <input
                 name="monthlySalary"
@@ -315,18 +347,27 @@ function StaffForm({
                 className="input font-mono"
               />
             </Field>
-            <Field label="Late Day Deduction" hint="0 = log lateness without docking pay.">
-              <input
-                name="lateDeduction"
-                type="number"
-                min={0}
-                step="1"
-                defaultValue={member?.lateDeduction ?? 0}
-                required
-                className="input font-mono"
-              />
-            </Field>
+            {selectedRole !== "manager" ? (
+              <Field label="Late Day Deduction" hint="0 = log lateness without docking pay.">
+                <input
+                  name="lateDeduction"
+                  type="number"
+                  min={0}
+                  step="1"
+                  defaultValue={member?.lateDeduction ?? 0}
+                  required
+                  className="input font-mono"
+                />
+              </Field>
+            ) : (
+              <input type="hidden" name="lateDeduction" value="0" />
+            )}
           </div>
+          {selectedRole === "manager" && (
+            <p className="text-[11px] text-muted">
+              💡 Daily attendance is required. Missed days will prorate monthly salary based on working days. Lateness deduction does not apply to managers.
+            </p>
+          )}
         </fieldset>
 
         <label className="flex items-center gap-2.5 text-xs sm:text-sm font-medium cursor-pointer">

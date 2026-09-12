@@ -205,19 +205,22 @@ export async function saveStaff(viewer: Viewer, input: StaffInput): Promise<void
     throw new StorageError("You cannot edit an owner's record.", 403);
   }
 
+  const resolvedRole = resolveRole(viewer, input, existing);
+  const isManager = resolvedRole === "manager";
+
   const row = {
     email: input.email.trim().toLowerCase(),
     full_name: input.fullName,
     phone: input.phone,
-    role: resolveRole(viewer, input, existing),
+    role: resolvedRole,
     cart_id: input.cartId,
     active: input.active,
-    shift_start: input.shiftStart,
-    shift_end: input.shiftEnd,
-    grace_minutes: input.graceMinutes,
+    shift_start: isManager ? null : input.shiftStart,
+    shift_end: isManager ? null : input.shiftEnd,
+    grace_minutes: isManager ? 0 : input.graceMinutes,
     monthly_salary: input.monthlySalary,
     working_days_per_month: input.workingDaysPerMonth,
-    late_deduction: input.lateDeduction,
+    late_deduction: isManager ? 0 : input.lateDeduction,
   };
 
   const { error } = input.id
