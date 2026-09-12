@@ -9,7 +9,10 @@ import {
   type ReferenceImage,
   type UniformSpec,
 } from "@/lib/gemini/dresscode";
+import { after } from "next/server";
+
 import { serverEnv } from "@/lib/env";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { providerFor, StorageError } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -392,4 +395,40 @@ export async function runDressCheckBatch(batchSize = BATCH_SIZE): Promise<Worker
   }
 
   return report;
+}
+
+/**
+ * Nudges the worker when the caller is waiting on a verdict.
+ *
+ * Vercel's Hobby plan caps cron at once a day, so the nightly sweep is a
+ * long-stop rather than a retry loop. The punch screen already re-renders every
+ * couple of seconds while a verdict is outstanding; hanging the retry off that
+ * is what keeps a failed first attempt from sitting until morning. Runs after
+ * the response, so nothing waits on it, and claiming is atomic so racing the
+ * cron is harmless.
+ */
+export function kickWorkerIfPending(
+  rateLimitKey: string,
+  events: Array<{ dressCheck: { status: string } | null }>,
+): void {
+  // "failed" belongs here as much as "queued": the worker still reclaims those
+  // rows until they run out of attempts, so leaving them out meant a check that
+  // failed once sat untouched until the nightly sweep even though the staff
+  // member was looking straight at it.
+  const pending = events.some((event) =>
+    ["queued", "running", "failed"].includes(event.dressCheck?.status ?? ""),
+  );
+  if (!pending) return;
+
+  // A tab left open on the punch screen polls indefinitely; this stops that
+  // from becoming a hot loop against the queue.
+  if (!checkRateLimit(`dress-kick:${rateLimitKey}`, 20, 60_000).ok) return;
+
+  after(async () => {
+    try {
+      await runDressCheckBatch();
+    } catch (error) {
+      console.error("[dress-checks] kick failed", error);
+    }
+  });
 }
