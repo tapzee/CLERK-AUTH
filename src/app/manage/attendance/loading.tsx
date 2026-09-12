@@ -11,7 +11,7 @@ export default function AttendanceLoading() {
       </div>
 
       <div className="card overflow-hidden p-0">
-        <div className="border-b border-border bg-surface-muted/50 p-3.5 flex gap-4">
+        <div className="border-b border-border bg-surface-muted p-3.5 flex gap-4">
           <div className="skeleton h-3.5 w-28" />
           <div className="skeleton h-3.5 w-24" />
           <div className="skeleton h-3.5 w-20" />

@@ -204,7 +204,7 @@ function PayrollRow({
         </div>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-surface-muted/40 p-3 text-xs sm:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-surface-muted p-3 text-xs sm:grid-cols-4">
         <Figure label="Days Present" value={String(shown.daysPresent)} />
         <Figure
           label="Days Late"

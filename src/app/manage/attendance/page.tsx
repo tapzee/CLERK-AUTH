@@ -50,7 +50,7 @@ export default async function AttendancePage({
           {/* Desktop Table View */}
           <Card className="hidden overflow-hidden md:block">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-surface-muted/50">
+              <thead className="border-b border-border bg-surface-muted">
                 <tr className="text-[11px] font-semibold uppercase tracking-wider text-muted">
                   <th className="px-4 py-3">Worker</th>
                   <th className="px-4 py-3">Assigned Shift</th>
@@ -63,7 +63,7 @@ export default async function AttendancePage({
                 {sheet.map((row) => (
                   <tr
                     key={row.staff.id}
-                    className="transition-colors hover:bg-surface-muted/30"
+                    className="transition-colors hover:bg-surface-muted"
                   >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
@@ -119,13 +119,13 @@ export default async function AttendancePage({
                   </div>
 
                   <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                    <div className="rounded-xl bg-surface-muted/50 p-2.5">
+                    <div className="rounded-xl bg-surface-muted p-2.5">
                       <dt className="label mb-1">Check In</dt>
                       <dd>
                         <CheckInCell row={row} />
                       </dd>
                     </div>
-                    <div className="rounded-xl bg-surface-muted/50 p-2.5">
+                    <div className="rounded-xl bg-surface-muted p-2.5">
                       <dt className="label mb-1">Check Out</dt>
                       <dd className="mt-0.5">
                         {row.checkOut ? (
@@ -142,7 +142,7 @@ export default async function AttendancePage({
                     </div>
                   </dl>
 
-                  <div className="mt-3 border-t border-border/40 pt-2.5">
+                  <div className="mt-3 border-t border-border pt-2.5">
                     <UniformCell row={row} />
                   </div>
                 </Card>

@@ -42,8 +42,18 @@ export const clerkAppearance = {
     card: "!shadow-none !border-none",
     footer: "!shadow-none",
     headerTitle: "tracking-[-0.01em]",
-    formButtonPrimary: "!shadow-none normal-case tracking-normal",
-    formFieldInput: "!shadow-none !border !border-border",
-    socialButtonsBlockButton: "!shadow-none !border !border-border",
+
+    // `max-sm:` rules are the phone pass: Clerk's own scale puts fields at
+    // 36px and 13px, which is under a comfortable thumb target and small
+    // enough that iOS Safari zooms the page when a field takes focus.
+    formFieldInput:
+      "!shadow-none !border !border-border max-sm:!text-base max-sm:!min-h-11",
+    formButtonPrimary:
+      "!shadow-none normal-case tracking-normal max-sm:!min-h-11",
+    socialButtonsBlockButton: "!shadow-none !border !border-border max-sm:!min-h-11",
+    formFieldInputShowPasswordButton: "max-sm:!min-h-11 max-sm:!min-w-11",
+    // Padding rather than min-height: it widens the hit area without taking
+    // the link out of its sentence and onto its own line.
+    footerActionLink: "max-sm:!px-1 max-sm:!py-2.5",
   },
 } as const;

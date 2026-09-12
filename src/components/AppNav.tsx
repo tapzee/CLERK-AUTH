@@ -16,10 +16,14 @@ export async function AppNav() {
     return (
       <div className="flex items-center gap-1">
         <SignInButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
-          <button className="btn btn-quiet py-1.5 text-[13px]">Sign in</button>
+          <button className="btn btn-quiet text-sm sm:py-1.5 sm:text-[13px]">
+            Sign in
+          </button>
         </SignInButton>
         <SignUpButton mode="modal" fallbackRedirectUrl="/" forceRedirectUrl="/">
-          <button className="btn btn-primary py-1.5 text-[13px]">Sign up</button>
+          <button className="btn btn-primary text-sm sm:py-1.5 sm:text-[13px]">
+            Sign up
+          </button>
         </SignUpButton>
       </div>
     );
@@ -54,7 +58,7 @@ export async function AppNav() {
             key={link.href}
             href={link.href}
             prefetch={true}
-            className="rounded-[8px] px-2.5 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+            className="flex min-h-11 items-center rounded-[8px] px-3 text-sm text-muted transition-colors hover:bg-surface-muted hover:text-foreground sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-[13px]"
           >
             {link.label}
           </Link>

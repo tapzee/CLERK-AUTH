@@ -35,7 +35,7 @@ export function WorkerCard({ worker }: { worker: AttendanceStatus["worker"] }) {
         </div>
 
         {worker.shiftStart ? (
-          <div className="flex items-center gap-2 rounded-xl bg-surface-muted/50 px-3 py-1.5 text-xs text-muted border border-border">
+          <div className="flex items-center gap-2 rounded-xl bg-surface-muted px-3 py-1.5 text-xs text-muted border border-border">
             <Clock className="h-3.5 w-3.5 text-accent" />
             <span className="font-mono">
               Shift: {worker.shiftStart.slice(0, 5)}
@@ -43,7 +43,7 @@ export function WorkerCard({ worker }: { worker: AttendanceStatus["worker"] }) {
             </span>
           </div>
         ) : (
-          <div className="rounded-xl bg-surface-muted/50 px-3 py-1.5 text-xs text-muted border border-border">
+          <div className="rounded-xl bg-surface-muted px-3 py-1.5 text-xs text-muted border border-border">
             {worker.role === "manager" ? "Flexible manager hours" : "No fixed shift assigned"}
           </div>
         )}

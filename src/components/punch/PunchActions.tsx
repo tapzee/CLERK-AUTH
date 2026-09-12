@@ -134,23 +134,23 @@ export function BlinkToggle({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3.5 text-sm transition hover:border-border cursor-pointer">
-      <div className="mt-0.5 grid h-6 w-6 place-items-center rounded-lg bg-accent-soft text-accent">
+    <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-surface p-4 text-sm transition-colors hover:border-border-strong">
+      <div className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-[8px] bg-accent-soft text-accent">
         <Eye className="h-3.5 w-3.5" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-xs text-foreground sm:text-sm">
-            Blink to Capture 👁️
+          <span className="text-sm font-semibold text-foreground">
+            Blink to capture
           </span>
           <input
             type="checkbox"
             checked={enabled}
             onChange={(event) => onChange(event.target.checked)}
-            className="h-4 w-4 accent-accent rounded cursor-pointer"
+            className="h-5 w-5 shrink-0 cursor-pointer rounded accent-accent sm:h-4 sm:w-4"
           />
         </div>
-        <p className="mt-0.5 text-xs text-muted text-pretty">
+        <p className="mt-1 text-[13px] leading-relaxed text-muted text-pretty sm:text-xs">
           {enabled && !armed
             ? "Ready — open camera and hold your eyes shut for 1s to capture automatically."
             : "Hold eyes shut for 1 second and the camera captures on open."}

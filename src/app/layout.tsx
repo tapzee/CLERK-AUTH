@@ -73,10 +73,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         <body className="flex min-h-full flex-col bg-background text-foreground">
           <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-sm">
-            <nav className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
+            <nav className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:h-14 sm:gap-4 sm:px-8">
               <Link
                 href="/"
-                className="text-[15px] font-semibold tracking-[-0.02em] text-foreground"
+                className="-ml-1 flex min-h-11 items-center px-1 text-base font-semibold tracking-[-0.02em] text-foreground sm:min-h-0 sm:text-[15px]"
               >
                 Shift<span className="text-accent">.</span>
               </Link>
@@ -85,16 +85,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </header>
 
-          <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:px-8 sm:py-12">
+          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8 sm:py-12">
             {children}
           </main>
 
           <footer className="border-t border-border">
-            <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-              <p className="text-xs text-muted">
+            <div className="mx-auto flex max-w-5xl flex-col gap-1.5 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+              <p className="text-[13px] text-muted sm:text-xs">
                 Shift — attendance, uniform checks and payroll for food carts.
               </p>
-              <p className="font-mono text-[11px] text-faint">
+              <p className="font-mono text-xs text-faint sm:text-[11px]">
                 Photos encrypted · signed URLs
               </p>
             </div>

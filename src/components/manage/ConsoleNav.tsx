@@ -47,7 +47,7 @@ export function ConsoleNav({ items }: { items: NavItem[] }) {
                 prefetch={true}
                 aria-current={current ? "page" : undefined}
                 className={`
-                  flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-[13px] font-medium tracking-[-0.01em] transition-colors duration-150
+                  flex min-h-10 items-center gap-2.5 rounded-[8px] px-3 text-sm font-medium tracking-[-0.01em] transition-colors duration-150 sm:min-h-0 sm:py-2 sm:text-[13px]
                   ${
                     current
                       ? "bg-ink text-ink-foreground"

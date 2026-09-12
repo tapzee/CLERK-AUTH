@@ -186,7 +186,7 @@ export default async function MyRecordPage({
               return (
                 <div
                   key={punch.eventId}
-                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 text-xs transition-colors hover:bg-surface-muted/30 sm:text-sm"
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 text-xs transition-colors hover:bg-surface-muted sm:text-sm"
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="font-semibold text-foreground">
@@ -255,10 +255,10 @@ function MonthTabs({ months, current }: { months: string[]; current: string }) {
           key={month}
           href={`/me?month=${month}`}
           aria-current={month === current ? "page" : undefined}
-          className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold tracking-tight transition-all sm:text-sm ${
+          className={`flex min-h-10 shrink-0 items-center rounded-[8px] px-3.5 text-sm font-medium tracking-[-0.01em] transition-colors sm:min-h-0 sm:py-1.5 sm:text-[13px] ${
             month === current
-              ? "bg-accent text-accent-foreground"
-              : "text-muted hover:bg-surface hover:text-foreground border border-transparent hover:border-border"
+              ? "bg-ink text-ink-foreground"
+              : "text-muted hover:bg-surface-muted hover:text-foreground"
           }`}
         >
           {formatMonth(month)}

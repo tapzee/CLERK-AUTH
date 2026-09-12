@@ -166,7 +166,7 @@ function LateList({ sheet }: { sheet: Awaited<ReturnType<typeof getDaySheet>> })
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-surface-muted/40">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3.5 bg-surface-muted">
         <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
           Needs Attention ({problems.length})
         </p>
@@ -176,7 +176,7 @@ function LateList({ sheet }: { sheet: Awaited<ReturnType<typeof getDaySheet>> })
         {problems.map((row) => (
           <li
             key={row.staff.id}
-            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5 transition-colors hover:bg-surface-muted/40"
+            className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5 transition-colors hover:bg-surface-muted"
           >
             <div className="flex items-center gap-3 min-w-0">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-muted text-xs font-semibold text-foreground border border-border">

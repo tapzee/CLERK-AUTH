@@ -254,7 +254,7 @@ function StaffForm({
         </div>
 
         {canSetRoles && (
-          <dl className="space-y-1.5 rounded-xl border border-border bg-surface-muted/50 p-3.5 text-xs">
+          <dl className="space-y-1.5 rounded-xl border border-border bg-surface-muted p-3.5 text-xs">
             {ROLES.map((role: Role) => (
               <div key={role} className="flex flex-wrap gap-x-2">
                 <dt className="font-semibold text-foreground">{ROLE_LABELS[role]}:</dt>

@@ -22,7 +22,7 @@ export function TodaysPunches({ events }: { events: AttendanceEvent[] }) {
             return (
               <li
                 key={event.id}
-                className="group relative rounded-xl border border-border bg-surface/50 p-3 transition-all duration-150 hover:bg-surface-muted/60"
+                className="group relative rounded-xl border border-border bg-surface/50 p-3 transition-all duration-150 hover:bg-surface-muted"
               >
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <div className="flex items-center gap-2">
@@ -52,7 +52,7 @@ export function TodaysPunches({ events }: { events: AttendanceEvent[] }) {
                 </div>
 
                 {event.dressCheck && (
-                  <div className="mt-2.5 border-t border-border/40 pt-2">
+                  <div className="mt-2.5 border-t border-border pt-2">
                     <VerdictLine check={event.dressCheck} />
                   </div>
                 )}

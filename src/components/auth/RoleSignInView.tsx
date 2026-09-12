@@ -85,7 +85,7 @@ export function RoleSignInView() {
       <div
         role="tablist"
         aria-label="Role"
-        className="mt-8 inline-flex rounded-[10px] border border-border bg-surface p-0.5"
+        className="mt-7 flex w-full rounded-[10px] border border-border bg-surface p-1 sm:mt-8 sm:inline-flex sm:w-auto sm:p-0.5"
       >
         {ROLE_ORDER.map((role) => {
           const info = ROLES_INFO[role];
@@ -99,13 +99,13 @@ export function RoleSignInView() {
               role="tab"
               aria-selected={isSelected}
               onClick={() => setSelectedRole(role)}
-              className={`flex cursor-pointer items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              className={`flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[8px] px-2 text-sm font-medium transition-colors sm:min-h-0 sm:flex-none sm:px-3 sm:py-1.5 sm:text-[13px] ${
                 isSelected
                   ? "bg-ink text-ink-foreground"
                   : "text-muted hover:text-foreground"
               }`}
             >
-              <RoleIcon className="h-3.5 w-3.5" />
+              <RoleIcon className="h-3.5 w-3.5 shrink-0" />
               {info.short}
             </button>
           );
@@ -129,9 +129,9 @@ export function RoleSignInView() {
             {current.capabilities.map((capability, index) => (
               <li
                 key={capability}
-                className="flex items-baseline gap-3 py-3 text-[13px] text-foreground"
+                className="flex items-baseline gap-3 py-3 text-sm text-foreground sm:text-[13px]"
               >
-                <span className="font-mono text-[11px] tnum text-faint">
+                <span className="font-mono text-xs tnum text-faint sm:text-[11px]">
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <span className="leading-relaxed">{capability}</span>
@@ -141,7 +141,7 @@ export function RoleSignInView() {
 
           <div className="mt-5 rounded-[10px] border border-border bg-surface-sunken p-3.5">
             <p className="label mb-1">Which account</p>
-            <p className="text-xs leading-relaxed text-muted">
+            <p className="text-[13px] leading-relaxed text-muted sm:text-xs">
               {current.instructions}
             </p>
           </div>
