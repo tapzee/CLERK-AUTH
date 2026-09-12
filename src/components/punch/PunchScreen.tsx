@@ -11,12 +11,13 @@ import {
   Clock,
   Eye,
   ShieldCheck,
+  Upload,
 } from "lucide-react";
 
 import { checkGeofence, formatDistance } from "@/lib/attendance/geofence";
 import type { AttendanceStatus, PunchKind } from "@/lib/attendance/types";
 import type { CaptureMethod } from "@/lib/geo";
-import { captureFrame } from "@/lib/image";
+import { captureFrame, shrinkImageFile } from "@/lib/image";
 import { isFixFresh, useGeolocation } from "@/lib/hooks/useGeolocation";
 import { useBlinkCapture, type BlinkState } from "@/lib/hooks/useBlinkCapture";
 import { usePersistedBoolean } from "@/lib/hooks/usePersistedBoolean";
@@ -35,7 +36,14 @@ type Phase =
   | { kind: "done"; message: string; tone: "success" | "warning" }
   | { kind: "error"; message: string };
 
-type Shot = { previewUrl: string; blob: Blob; width: number; height: number; method: CaptureMethod };
+type Shot = {
+  previewUrl: string;
+  blob: Blob;
+  width: number;
+  height: number;
+  method: CaptureMethod;
+  source?: "camera" | "upload";
+};
 
 const LABEL: Record<PunchKind, string> = { in: "Check in", out: "Check out" };
 
@@ -48,11 +56,13 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [shot, setShot] = useState<Shot | null>(null);
   const [polls, setPolls] = useState(0);
   const [blinkEnabled, toggleBlink] = usePersistedBoolean(BLINK_PREFERENCE_KEY);
+  const [isDragging, setIsDragging] = useState(false);
 
   const geo = useGeolocation(true);
 
@@ -104,7 +114,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setPhase({
         kind: "error",
-        message: "This browser has no camera API. Camera access needs HTTPS or localhost.",
+        message: "This browser has no camera API. Camera access needs HTTPS or localhost. You can still use the Upload Photo option.",
       });
       return;
     }
@@ -125,8 +135,8 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
         kind: "error",
         message:
           error instanceof DOMException && error.name === "NotAllowedError"
-            ? "Camera permission was denied. Allow it in your browser settings and try again."
-            : "Could not start the camera. Is another app using it?",
+            ? "Camera permission was denied. Allow it in your browser settings or use the Upload Photo option below."
+            : "Could not start the camera. Try again or upload an image directly.",
       });
     }
   }, [stopStream]);
@@ -149,6 +159,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
         width: frame.width,
         height: frame.height,
         method,
+        source: "camera",
       });
       setPhase({ kind: "review" });
     },
@@ -165,10 +176,99 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     onTrigger: captureOnBlink,
   });
 
+  const processSelectedFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) {
+        setPhase({
+          kind: "error",
+          message: "Please select a valid image file (JPG, PNG, or WebP).",
+        });
+        return;
+      }
+
+      if (file.size > 15 * 1024 * 1024) {
+        setPhase({
+          kind: "error",
+          message: "The selected image is too large (max 15 MB).",
+        });
+        return;
+      }
+
+      stopStream();
+      setPhase({ kind: "starting" });
+
+      try {
+        let processedFile: File = file;
+        let width = 1280;
+        let height = 720;
+
+        try {
+          processedFile = await shrinkImageFile(file);
+          const bitmap = await createImageBitmap(processedFile);
+          width = bitmap.width;
+          height = bitmap.height;
+          bitmap.close();
+        } catch {
+          try {
+            const bitmap = await createImageBitmap(file);
+            width = bitmap.width;
+            height = bitmap.height;
+            bitmap.close();
+          } catch {
+            // Default dimensions
+          }
+        }
+
+        if (shot) URL.revokeObjectURL(shot.previewUrl);
+
+        const previewUrl = URL.createObjectURL(processedFile);
+        setShot({
+          previewUrl,
+          blob: processedFile,
+          width,
+          height,
+          method: "manual",
+          source: "upload",
+        });
+        setPhase({ kind: "review" });
+      } catch {
+        setPhase({
+          kind: "error",
+          message: "Could not process this image. Please try another photo.",
+        });
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    },
+    [shot, stopStream],
+  );
+
+  const handleFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        void processSelectedFile(file);
+      }
+    },
+    [processSelectedFile],
+  );
+
+  const triggerUpload = useCallback(() => {
+    stopStream();
+    fileInputRef.current?.click();
+  }, [stopStream]);
+
   const retake = useCallback(() => {
     if (shot) URL.revokeObjectURL(shot.previewUrl);
+    const wasCamera = shot?.source === "camera";
     setShot(null);
-    void startCamera();
+    if (wasCamera) {
+      void startCamera();
+    } else {
+      setPhase({ kind: "idle" });
+    }
   }, [shot, startCamera]);
 
   const submit = useCallback(async () => {
@@ -176,7 +276,9 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
     setPhase({ kind: "submitting" });
 
     const form = new FormData();
-    form.append("photo", shot.blob, "punch.jpg");
+    const filename =
+      shot.blob instanceof File && shot.blob.name ? shot.blob.name : "punch.jpg";
+    form.append("photo", shot.blob, filename);
     form.append("kind", nextKind);
     form.append("width", String(shot.width));
     form.append("height", String(shot.height));
@@ -229,8 +331,33 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
       <WorkerCard worker={worker} />
       <GeofenceBar fence={fence} cartName={cart.name} geo={geo} />
 
+      {/* Hidden file input for uploading an image */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       {/* Futuristic Viewfinder HUD */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl border border-border/80 bg-neutral-950 shadow-2xl sm:aspect-[4/3]">
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (fence.ok) setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          if (!fence.ok) return;
+          const file = e.dataTransfer.files?.[0];
+          if (file) void processSelectedFile(file);
+        }}
+        className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl border bg-neutral-950 shadow-2xl transition-all duration-200 sm:aspect-[4/3] ${
+          isDragging ? "border-accent ring-2 ring-accent/40" : "border-border/80"
+        }`}
+      >
         {/* HUD Corner Brackets */}
         <div className="pointer-events-none absolute inset-4 z-10">
           <div className="absolute top-0 left-0 h-4 w-4 border-t-2 border-l-2 border-white/50 rounded-tl" />
@@ -239,13 +366,41 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
           <div className="absolute bottom-0 right-0 h-4 w-4 border-b-2 border-r-2 border-white/50 rounded-br" />
         </div>
 
+        {/* Drag & Drop Overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 z-30 grid place-items-center bg-accent/20 px-6 text-center backdrop-blur-md border-2 border-dashed border-accent">
+            <div className="space-y-2">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-accent text-white shadow-lg animate-bounce">
+                <Upload className="h-7 w-7" />
+              </div>
+              <p className="text-base font-bold text-white">Drop image to check in</p>
+              <p className="text-xs text-white/80">Release to verify uniform with Vision AI</p>
+            </div>
+          </div>
+        )}
+
         {shot ? (
-          // eslint-disable-next-line @next/next/no-img-element -- blob: preview
-          <img
-            src={shot.previewUrl}
-            alt="Check-in preview"
-            className="h-full w-full object-contain"
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- blob: preview */}
+            <img
+              src={shot.previewUrl}
+              alt="Check-in preview"
+              className="h-full w-full object-contain"
+            />
+            <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md border border-white/10 shadow-sm">
+              {shot.source === "upload" ? (
+                <>
+                  <Upload className="h-3 w-3 text-accent" />
+                  <span>Uploaded photo</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="h-3 w-3 text-accent" />
+                  <span>Live capture</span>
+                </>
+              )}
+            </div>
+          </>
         ) : (
           <video
             ref={videoRef}
@@ -262,27 +417,51 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
         )}
 
         {!shot && phase.kind !== "live" && (
-          <div className="absolute inset-0 grid place-items-center bg-black/40 px-6 text-center backdrop-blur-[2px]">
-            <div className="space-y-2">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/10 text-white/90 backdrop-blur-md">
-                <Camera className="h-6 w-6" />
+          <div
+            onClick={() => {
+              if (fence.ok && phase.kind === "idle") {
+                triggerUpload();
+              }
+            }}
+            className={`absolute inset-0 grid place-items-center bg-black/40 px-6 text-center backdrop-blur-[2px] ${
+              fence.ok && phase.kind === "idle" ? "cursor-pointer transition hover:bg-black/30" : ""
+            }`}
+          >
+            <div className="space-y-3">
+              <div className="mx-auto flex items-center justify-center gap-2.5">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10 text-white/90 backdrop-blur-md shadow-sm">
+                  <Camera className="h-6 w-6" />
+                </div>
+                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-accent-soft text-accent backdrop-blur-md shadow-sm">
+                  <Upload className="h-6 w-6" />
+                </div>
               </div>
-              <p className="text-sm font-medium text-white/90">
-                {phase.kind === "starting"
-                  ? "Starting camera…"
-                  : fence.ok
-                    ? `Ready to ${LABEL[nextKind].toLowerCase()}`
-                    : "Camera opens once you are at the cart"}
-              </p>
-              <p className="text-xs text-white/60">
-                {fence.ok ? "Ensure cap and apron are clearly visible" : "Move within the cart radius"}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white/90">
+                  {phase.kind === "starting"
+                    ? "Starting camera / loading photo…"
+                    : fence.ok
+                      ? `Ready to ${LABEL[nextKind].toLowerCase()}`
+                      : "Camera & upload unlock once you are at the cart"}
+                </p>
+                <p className="text-xs text-white/70">
+                  {fence.ok
+                    ? "Take a photo or upload an image (cap & apron must be visible)"
+                    : "Move within the cart radius"}
+                </p>
+              </div>
+              {fence.ok && phase.kind === "idle" && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-[11px] font-medium text-white/80">
+                  <Upload className="h-3 w-3 text-accent" />
+                  <span>Click to browse photo, or choose below</span>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {busy && (
-          <div className="absolute inset-0 grid place-items-center bg-black/75 px-6 text-center backdrop-blur-md">
+          <div className="absolute inset-0 grid place-items-center bg-black/75 px-6 text-center backdrop-blur-md z-20">
             <div className="space-y-3">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent/20 text-accent">
                 <ShieldCheck className="h-6 w-6 animate-pulse" />
@@ -320,6 +499,7 @@ export function PunchScreen({ status }: { status: AttendanceStatus }) {
         onCapture={capture}
         onSubmit={submit}
         onRetake={retake}
+        onUploadClick={triggerUpload}
       />
 
       {phase.kind === "error" && (
@@ -408,7 +588,7 @@ function GeofenceBar({
   fence: ReturnType<typeof checkGeofence>;
   cartName: string;
   geo: ReturnType<typeof useGeolocation>;
-}) {
+  }) {
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs transition-all duration-200 sm:text-sm ${
@@ -470,7 +650,7 @@ function RejectionNotice({
       )}
 
       <p className="mt-3 text-xs text-danger/80 text-pretty">
-        Adjust your uniform and retake your selfie to complete your check-in.
+        Adjust your uniform and retake or upload a new photo to complete your check-in.
       </p>
     </div>
   );
@@ -485,6 +665,7 @@ function Actions({
   onCapture,
   onSubmit,
   onRetake,
+  onUploadClick,
 }: {
   phase: Phase;
   hasShot: boolean;
@@ -494,6 +675,7 @@ function Actions({
   onCapture: () => void;
   onSubmit: () => void;
   onRetake: () => void;
+  onUploadClick: () => void;
 }) {
   const busy = phase.kind === "submitting";
 
@@ -514,7 +696,16 @@ function Actions({
           className="btn btn-ghost py-3"
         >
           <RotateCcw className="h-4 w-4" />
-          <span>Retake</span>
+          <span>Change / Retake</span>
+        </button>
+        <button
+          type="button"
+          onClick={onUploadClick}
+          disabled={busy || !canPunch}
+          className="btn btn-ghost py-3 text-xs sm:text-sm text-muted hover:text-foreground"
+        >
+          <Upload className="h-4 w-4" />
+          <span>Upload different photo</span>
         </button>
       </div>
     );
@@ -522,26 +713,49 @@ function Actions({
 
   if (phase.kind === "live") {
     return (
-      <button
-        onClick={() => onCapture()}
-        className="btn btn-primary w-full py-3.5 text-base shadow-lg shadow-accent/20"
-      >
-        <Camera className="h-5 w-5" />
-        <span>Capture photo</span>
-      </button>
+      <div className="flex flex-col gap-2.5 sm:flex-row">
+        <button
+          onClick={() => onCapture()}
+          className="btn btn-primary flex-1 py-3.5 text-base shadow-lg shadow-accent/20"
+        >
+          <Camera className="h-5 w-5" />
+          <span>Capture photo</span>
+        </button>
+        <button
+          type="button"
+          onClick={onUploadClick}
+          className="btn btn-ghost py-3.5 text-sm"
+        >
+          <Upload className="h-4 w-4" />
+          <span>Upload file instead</span>
+        </button>
+      </div>
     );
   }
 
   return (
-    <button
-      onClick={onStart}
-      disabled={!canPunch}
-      title={canPunch ? undefined : "You must be at the cart to punch."}
-      className="btn btn-primary w-full py-3.5 text-base shadow-lg shadow-accent/20"
-    >
-      <Camera className="h-5 w-5" />
-      <span>{phase.kind === "rejected" ? "Try again" : `Open Camera (${LABEL[nextKind]})`}</span>
-    </button>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <button
+        onClick={onStart}
+        disabled={!canPunch}
+        title={canPunch ? undefined : "You must be at the cart to punch."}
+        className="btn btn-primary w-full py-3.5 text-sm sm:text-base shadow-lg shadow-accent/20"
+      >
+        <Camera className="h-5 w-5" />
+        <span>{phase.kind === "rejected" ? "Try camera again" : `Open Camera (${LABEL[nextKind]})`}</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onUploadClick}
+        disabled={!canPunch}
+        title={canPunch ? undefined : "You must be at the cart to punch."}
+        className="btn btn-secondary w-full py-3.5 text-sm sm:text-base border border-border/80 bg-surface-glass hover:bg-surface-muted"
+      >
+        <Upload className="h-5 w-5 text-accent" />
+        <span>Upload photo</span>
+      </button>
+    </div>
   );
 }
 
@@ -613,3 +827,4 @@ function BlinkOverlay({ blink }: { blink: BlinkState }) {
     </div>
   );
 }
+
