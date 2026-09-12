@@ -2,7 +2,8 @@
 
 import { useActionState, startTransition } from "react";
 
-import { claimAdminAction, IDLE, type ActionState } from "@/app/admin/actions";
+import { claimAdminAction } from "@/app/admin/actions";
+import { IDLE, type ActionState } from "@/app/admin/action-state";
 
 /**
  * Bootstrap for an empty staff table.
