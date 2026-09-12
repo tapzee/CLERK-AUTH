@@ -3,7 +3,6 @@
   "crons": [
     {
       "path": "/api/cron/dress-checks",
-      "//": "Hobby plans reject anything more frequent than daily, and the deployment fails outright rather than degrading. This is the long-stop sweeper: the fast path is after() on the punch, and the staff screen's poll retries anything that failed while someone is still watching. On Pro, '*/5 * * * *' is a better fit.",
       "schedule": "0 3 * * *"
     }
   ]
