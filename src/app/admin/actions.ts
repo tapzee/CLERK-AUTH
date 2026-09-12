@@ -16,9 +16,7 @@ import { ITEM_KEYS, REFERENCE_KEYS, type ItemKey } from "@/lib/gemini/dresscode"
 import { StorageError } from "@/lib/storage";
 import type { StaffRole } from "@/lib/attendance/types";
 
-export type ActionState = { ok: boolean; error: string | null };
-
-export const IDLE: ActionState = { ok: false, error: null };
+import type { ActionState } from "./action-state";
 
 /**
  * Every action below re-checks the session and the role.
