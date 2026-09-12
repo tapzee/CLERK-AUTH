@@ -95,15 +95,16 @@ export function PageHeader({
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-            {eyebrow}
-          </p>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-accent/25 bg-accent-soft px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-accent backdrop-blur-md mb-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            <span>{eyebrow}</span>
+          </div>
         )}
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-sm text-muted text-pretty">{description}</p>
+          <p className="mt-1 text-xs text-muted sm:text-sm text-pretty">{description}</p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -123,7 +124,7 @@ export function SectionHeading({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+        <h2 className="text-base font-bold tracking-tight text-foreground">{title}</h2>
         {description && <p className="mt-0.5 text-xs text-muted text-pretty">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -143,13 +144,13 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-dashed border-border bg-surface-glass/50 px-6 py-12 text-center backdrop-blur-sm">
+    <div className="relative overflow-hidden rounded-2xl border border-dashed border-border bg-surface-glass/40 px-6 py-12 text-center backdrop-blur-md">
       {icon && (
-        <div className="mx-auto mb-3.5 grid h-10 w-10 place-items-center rounded-xl bg-surface-muted text-muted shadow-sm">
+        <div className="mx-auto mb-3.5 grid h-12 w-12 place-items-center rounded-2xl bg-accent-soft border border-accent/15 text-accent shadow-sm">
           {icon}
         </div>
       )}
-      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <p className="text-sm font-bold text-foreground">{title}</p>
       {body && (
         <p className="mx-auto mt-1.5 max-w-sm text-xs text-muted text-pretty">{body}</p>
       )}
@@ -172,7 +173,7 @@ export function Field({
     <label className="block">
       <span className="label">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-xs text-muted text-pretty">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-[11px] text-muted text-pretty">{hint}</span>}
     </label>
   );
 }
@@ -201,19 +202,31 @@ export function Stat({
 
   const bgGlow: Record<Tone, string> = {
     neutral: "hover:border-border",
-    accent: "hover:border-accent/30",
-    success: "hover:border-success/30",
-    warning: "hover:border-warning/30",
-    danger: "hover:border-danger/30",
+    accent: "hover:border-accent/40 hover:shadow-accent/10",
+    success: "hover:border-success/40 hover:shadow-success/10",
+    warning: "hover:border-warning/40 hover:shadow-warning/10",
+    danger: "hover:border-danger/40 hover:shadow-danger/10",
+  };
+
+  const iconBg: Record<Tone, string> = {
+    neutral: "bg-surface-muted text-muted",
+    accent: "bg-accent-soft text-accent border border-accent/20",
+    success: "bg-success-soft text-success border border-success/20",
+    warning: "bg-warning-soft text-warning border border-warning/20",
+    danger: "bg-danger-soft text-danger border border-danger/20",
   };
 
   return (
-    <Card className={`p-4 transition-all duration-200 ${bgGlow[tone]}`}>
+    <Card className={`p-4 sm:p-5 transition-all duration-200 hover:shadow-lg ${bgGlow[tone]}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="label mb-0">{label}</p>
-        {icon && <span className="text-muted/70">{icon}</span>}
+        {icon && (
+          <div className={`grid h-8 w-8 place-items-center rounded-xl text-xs font-semibold ${iconBg[tone]}`}>
+            {icon}
+          </div>
+        )}
       </div>
-      <p className={`mt-2 text-2xl font-bold tracking-tight tabular-nums ${valueTone[tone]}`}>
+      <p className={`mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums ${valueTone[tone]}`}>
         {value}
       </p>
       {detail && <p className="mt-1 text-xs text-muted text-pretty">{detail}</p>}

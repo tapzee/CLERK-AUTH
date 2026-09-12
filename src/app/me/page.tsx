@@ -88,8 +88,8 @@ export default async function MyRecordPage({
         title="My Attendance &amp; Pay"
         description={record.fullName}
         action={
-          <Link href="/punch" className="btn btn-ghost text-xs sm:text-sm">
-            <Camera className="h-4 w-4 text-accent" />
+          <Link href="/punch" className="btn btn-primary text-xs sm:text-sm">
+            <Camera className="h-4 w-4" />
             <span>Punch screen</span>
           </Link>
         }
@@ -99,20 +99,21 @@ export default async function MyRecordPage({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat
-          label="Days present"
+          label="Days Present"
           value={summary.daysPresent}
           detail={`of ${record.workingDaysPerMonth} working days`}
-          icon={<CalendarCheck className="h-4 w-4 text-accent" />}
+          icon={<CalendarCheck className="h-4 w-4" />}
+          tone="success"
         />
         <Stat
-          label="Days late"
+          label="Days Late"
           value={viewer.role === "manager" ? 0 : summary.daysLate}
-          detail={viewer.role === "manager" ? "Flexible hours (exempt)" : `past your ${record.graceMinutes}m grace`}
+          detail={viewer.role === "manager" ? "Flexible hours (exempt)" : `past ${record.graceMinutes}m grace`}
           tone={viewer.role !== "manager" && summary.daysLate > 0 ? "warning" : "success"}
-          icon={<Clock className="h-4 w-4 text-accent" />}
+          icon={<Clock className="h-4 w-4" />}
         />
         <Stat
-          label={run ? "Payslip" : "Estimated pay"}
+          label={run ? "Payslip" : "Estimated Pay"}
           value={record.monthlySalary === null ? "—" : formatMoney(run?.net ?? pay.net)}
           detail={
             record.monthlySalary === null
@@ -121,19 +122,21 @@ export default async function MyRecordPage({
                 ? statusLine(run.status)
                 : "pending manager sign-off"
           }
-          tone={run?.status === "paid" || run?.status === "approved" ? "success" : "neutral"}
-          icon={<Banknote className="h-4 w-4 text-accent" />}
+          tone={run?.status === "paid" || run?.status === "approved" ? "success" : "accent"}
+          icon={<Banknote className="h-4 w-4" />}
         />
       </div>
 
       {record.monthlySalary !== null && (
-        <Card className="p-5">
+        <Card className="p-5 sm:p-6 border-accent/30 bg-surface-glass shadow-lg">
           <div className="flex items-center gap-2 border-b border-border/60 pb-3">
-            <Calculator className="h-4 w-4 text-accent" />
-            <p className="label mb-0">Transparent Pay Arithmetic</p>
+            <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent-soft text-accent">
+              <Calculator className="h-4 w-4" />
+            </div>
+            <p className="label mb-0 text-foreground">Transparent Pay Arithmetic</p>
           </div>
 
-          <dl className="mt-4 space-y-2.5 text-xs sm:text-sm">
+          <dl className="mt-4 space-y-3 text-xs sm:text-sm">
             <Line
               label={`${formatMoney(record.monthlySalary)} base ÷ ${record.workingDaysPerMonth} days`}
               value={`${formatMoney(pay.perDay)} per day`}
@@ -149,9 +152,14 @@ export default async function MyRecordPage({
                 tone="danger"
               />
             )}
-            <div className="flex items-baseline justify-between gap-4 border-t border-border/80 pt-3 font-bold text-foreground sm:text-base">
-              <dt>Calculated Take-Home</dt>
-              <dd className="font-mono text-accent tabular-nums text-lg">
+            <div className="flex items-baseline justify-between gap-4 border-t border-border/80 pt-3.5 font-bold text-foreground sm:text-base">
+              <div>
+                <dt className="font-extrabold text-foreground">Calculated Take-Home Pay</dt>
+                <p className="text-[11px] font-normal text-muted">
+                  {run ? `Status: ${statusLine(run.status)}` : "Estimated before monthly final run"}
+                </p>
+              </div>
+              <dd className="font-mono text-accent tabular-nums text-xl sm:text-2xl font-extrabold">
                 {formatMoney(pay.net)}
               </dd>
             </div>

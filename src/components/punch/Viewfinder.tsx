@@ -56,17 +56,33 @@ export function Viewfinder({
         const file = event.dataTransfer.files?.[0];
         if (file) onDropFile(file);
       }}
-      className={`relative aspect-[3/4] w-full overflow-hidden rounded-2xl border bg-neutral-950 shadow-2xl transition-all duration-200 sm:aspect-[4/3] ${
-        isDragging ? "border-accent ring-2 ring-accent/40" : "border-border/80"
+      className={`relative aspect-[3/4] w-full overflow-hidden rounded-3xl border bg-neutral-950 shadow-2xl transition-all duration-300 sm:aspect-[4/3] ${
+        isDragging ? "border-accent ring-4 ring-accent/30" : "border-border/80 shadow-accent/5"
       }`}
     >
-      {/* HUD corner brackets */}
-      <div className="pointer-events-none absolute inset-4 z-10">
-        <div className="absolute top-0 left-0 h-4 w-4 border-t-2 border-l-2 border-white/50 rounded-tl" />
-        <div className="absolute top-0 right-0 h-4 w-4 border-t-2 border-r-2 border-white/50 rounded-tr" />
-        <div className="absolute bottom-0 left-0 h-4 w-4 border-b-2 border-l-2 border-white/50 rounded-bl" />
-        <div className="absolute bottom-0 right-0 h-4 w-4 border-b-2 border-r-2 border-white/50 rounded-br" />
+      {/* High-Tech Biometric HUD corner brackets */}
+      <div className="pointer-events-none absolute inset-4 z-10 sm:inset-6">
+        <div className="absolute top-0 left-0 h-5 w-5 border-t-2 border-l-2 border-accent rounded-tl shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+        <div className="absolute top-0 right-0 h-5 w-5 border-t-2 border-r-2 border-accent rounded-tr shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+        <div className="absolute bottom-0 left-0 h-5 w-5 border-b-2 border-l-2 border-accent rounded-bl shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+        <div className="absolute bottom-0 right-0 h-5 w-5 border-b-2 border-r-2 border-accent rounded-br shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
       </div>
+
+      {/* Face Placement Target Guide (Visible during live framing) */}
+      {phase.kind === "live" && !shot && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center">
+          <div
+            className={`h-48 w-36 sm:h-56 sm:w-44 rounded-[40%] border-2 border-dashed transition-colors duration-300 ${
+              blink.faceDetected
+                ? "border-emerald-400/80 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                : "border-white/30 bg-black/10"
+            }`}
+          />
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-white/70 bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
+            {blink.faceDetected ? "✓ Face Locked & In Focus" : "Align face, cap & apron"}
+          </p>
+        </div>
+      )}
 
       {isDragging && <DropTarget />}
 
@@ -91,7 +107,7 @@ export function Viewfinder({
       )}
 
       {phase.kind === "live" && !shot && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-accent to-transparent opacity-75 animate-scanline" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-accent to-transparent opacity-90 animate-laser" />
       )}
 
       {!shot && phase.kind !== "live" && (
@@ -129,7 +145,7 @@ function SourceBadge({ source }: { source: Shot["source"] }) {
   const Icon = source === "upload" ? Upload : Camera;
 
   return (
-    <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md border border-white/10 shadow-sm">
+    <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 rounded-full bg-black/75 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md border border-white/15 shadow-md">
       <Icon className="h-3 w-3 text-accent" />
       <span>{source === "upload" ? "Uploaded photo" : "Live capture"}</span>
     </div>
