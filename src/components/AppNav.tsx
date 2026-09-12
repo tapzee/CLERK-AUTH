@@ -29,13 +29,25 @@ export async function AppNav() {
     );
   }
 
-  const links = [{ href: "/punch", label: "Punch" }];
+  const links: { href: string; label: string }[] = [];
 
   if (state.status === "enrolled") {
-    links.push({ href: "/me", label: "My record" });
+    // An owner does not clock in or draw a salary through this system -- see
+    // the `WORKER` permission split in rbac.ts -- so neither link is offered
+    // to them; both would only lead to a screen that refuses them.
+    if (can(state.viewer.role, "attendance:punch")) {
+      links.push({ href: "/punch", label: "Punch" });
+    }
+    if (can(state.viewer.role, "attendance:read:own")) {
+      links.push({ href: "/me", label: "My record" });
+    }
     if (can(state.viewer.role, "console:read")) {
       links.push({ href: "/manage", label: "Console" });
     }
+  } else {
+    // Not enrolled yet: /punch is also where enrolment is explained, so it is
+    // the one link worth offering before a role exists to check.
+    links.push({ href: "/punch", label: "Punch" });
   }
 
   return (

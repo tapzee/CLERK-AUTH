@@ -24,6 +24,11 @@ export default async function PunchPage() {
 
   const { viewer } = state;
 
+  // An owner does not clock in through this system -- see the `WORKER`
+  // permission split in rbac.ts -- so they belong at the console, not at a
+  // screen that would otherwise tell them to go find a cart to be assigned to.
+  if (!can(viewer.role, "attendance:punch")) redirect("/manage");
+
   let worker;
   try {
     worker = await findWorker(viewer.staffId);

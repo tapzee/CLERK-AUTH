@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { can } from "@/lib/auth/rbac";
 import { getViewerState } from "@/lib/auth/viewer";
 import { getMonthlyAttendance, getWorkerMonth } from "@/lib/manage/attendance";
 import { findStaffRecord } from "@/lib/manage/staff";
@@ -46,6 +47,11 @@ export default async function MyRecordPage({
   if (state.status === "not-enrolled") redirect("/punch");
 
   const { viewer } = state;
+
+  // An owner draws no salary and keeps no attendance of their own through this
+  // system -- see the `WORKER` permission split in rbac.ts -- so this page has
+  // nothing of theirs to show.
+  if (!can(viewer.role, "attendance:read:own")) redirect("/manage");
 
   const months = recentMonths(6);
   const params = await searchParams;
