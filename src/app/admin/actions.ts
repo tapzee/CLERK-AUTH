@@ -36,7 +36,10 @@ async function authorize() {
 function fail(error: unknown): ActionState {
   if (error instanceof StorageError) return { ok: false, error: error.message };
   console.error("[admin action]", error);
-  return { ok: false, error: "Something went wrong." };
+  // The panel is staff-only, and a bootstrap that fails with a tidy "something
+  // went wrong" leaves the one person who could fix it nothing to go on.
+  const detail = error instanceof Error ? error.message : String(error);
+  return { ok: false, error: detail ? "Failed: " + detail : "Something went wrong." };
 }
 
 function text(form: FormData, key: string): string {
